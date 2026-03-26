@@ -1,0 +1,22 @@
+# Bỏ qua thư mục môi trường ảo và cache của Python
+data-pipeline/venv/
+data-pipeline/__pycache__/
+.env
+
+# Bỏ qua các file PDF nặng và database cục bộ
+data-pipeline/data/
+data-pipeline/chroma_db/
+
+# Bỏ qua các file build của Java Spring Boot
+backend/target/
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+*.class
+*.jar
+*.war
+
+# Bỏ qua file cấu hình IDE
+.idea/
+.vscode/
+*.iml
