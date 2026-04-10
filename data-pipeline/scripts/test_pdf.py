@@ -14,7 +14,7 @@ def check_all_pdfs(directory: str, test_page_index: int = 10) -> Dict[str, Any]:
     pdf_files = sorted(glob.glob(os.path.join(directory, "*.pdf")))
     
     if not pdf_files:
-        print("❌ Không tìm thấy file PDF nào! Em nhớ copy sách vào thư mục data/raw nhé.")
+        print("❌ Không tìm thấy file PDF nào! Hãy copy sách vào thư mục data/raw nhé.")
         return {
             "scan_dir": os.path.abspath(directory),
             "scanned_at": int(time.time()),
