@@ -1,26 +1,25 @@
-"""
-Ingest precomputed embeddings + records into PostgreSQL + pgvector.
+"""Ingest precomputed embeddings + records into PostgreSQL + pgvector.
 
 Input files:
 - embeddings.npy  (N, D) float32
-- records.jsonl   (N lines, metadata + content)
+- records.jsonl   (N lines)
+
+This script expects the NEW schema created by Flyway:
+- documents(source_file ...)
+- rag_chunks(document_id, chunk_index) unique key, plus content/page ranges/page_spans_json/metadata/embedding
+
+It will:
+1) Upsert into `documents` by `source_file`
+2) Upsert into `rag_chunks` by (document_id, chunk_index)
 """
 
 import argparse
 import json
 import os
-import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import psycopg
-from psycopg import sql
-
-
-def validate_table_name(table_name: str) -> str:
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
-        raise ValueError(f"Invalid table name: {table_name}")
-    return table_name
 
 
 def vector_to_literal(vec: np.ndarray) -> str:
@@ -37,53 +36,82 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def create_table_and_index(conn: psycopg.Connection, table_name: str, embedding_dim: int, distance: str) -> None:
-    distance_ops_map = {
-        "cosine": "vector_cosine_ops",
-        "l2": "vector_l2_ops",
-        "ip": "vector_ip_ops",
-    }
-    if distance not in distance_ops_map:
-        raise ValueError("distance must be one of: cosine, l2, ip")
-    distance_ops = distance_ops_map[distance]
+def ensure_json_str(value: Any) -> str:
+    if value is None:
+        return "[]"
+    if isinstance(value, str):
+        # Assume already JSON.
+        return value
+    return json.dumps(value, ensure_ascii=False)
 
+
+def derive_title_from_source(source_file: str) -> str:
+    base = os.path.basename(source_file)
+    stem, _ = os.path.splitext(base)
+    return stem
+
+
+def ensure_schema(conn: psycopg.Connection) -> None:
     with conn.cursor() as cur:
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-        cur.execute(
-            sql.SQL(
-                """
-                CREATE TABLE IF NOT EXISTS {table} (
-                    id TEXT PRIMARY KEY,
-                    source_file_name TEXT NOT NULL,
-                    chunk_id INT NOT NULL,
-                    page_start INT NOT NULL,
-                    page_end INT NOT NULL,
-                    word_count INT NOT NULL,
-                    content TEXT NOT NULL,
-                    page_spans_json JSONB NOT NULL,
-                    embedding vector({dim}) NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                """
-            ).format(table=sql.Identifier(table_name), dim=sql.SQL(str(embedding_dim)))
-        )
-
-        index_name = f"{table_name}_embedding_hnsw"
-        cur.execute(
-            sql.SQL(
-                """
-                CREATE INDEX IF NOT EXISTS {index_name}
-                ON {table}
-                USING hnsw (embedding {distance_ops});
-                """
-            ).format(
-                index_name=sql.Identifier(index_name),
-                table=sql.Identifier(table_name),
-                distance_ops=sql.SQL(distance_ops),
+        cur.execute("SELECT to_regclass('public.documents'), to_regclass('public.rag_chunks');")
+        docs, chunks = cur.fetchone()
+        if docs is None or chunks is None:
+            raise RuntimeError(
+                "Missing tables `documents` and/or `rag_chunks`. Run Flyway migrations for the backend first."
             )
-        )
     conn.commit()
+
+
+def normalize_record(r: Dict[str, Any]) -> Tuple[str, int, int, int, Optional[int], str, str, str]:
+    source_file_name = r.get("source_file_name")
+    if not source_file_name:
+        raise ValueError("Record missing `source_file_name`")
+
+    chunk_index_val = r.get("chunk_index")
+    if chunk_index_val is None:
+        # Backward compatibility: accept Kaggle export key `chunk_id`.
+        chunk_index_val = r.get("chunk_id")
+    if chunk_index_val is None:
+        raise ValueError(f"Record for source_file_name={source_file_name} missing `chunk_index` (or legacy `chunk_id`)")
+    chunk_index = int(chunk_index_val)
+
+    page_start = int(r.get("page_start"))
+    page_end = int(r.get("page_end"))
+
+    content = r.get("content")
+    if content is None:
+        # Some legacy exports might use `text`.
+        content = r.get("text")
+    content = str(content) if content is not None else ""
+
+    word_count_val = r.get("word_count")
+    word_count = int(word_count_val) if word_count_val is not None else (len(content.split()) if content else 0)
+
+    page_spans_json = ensure_json_str(r.get("page_spans_json", []))
+
+    metadata_obj = r.get("metadata")
+    if metadata_obj is None:
+        metadata_obj = {}
+    if not isinstance(metadata_obj, dict):
+        metadata_obj = {"_raw": metadata_obj}
+
+    # Preserve chunk_uid if present (not used as key anymore)
+    if "chunk_uid" in r and "chunk_uid" not in metadata_obj:
+        metadata_obj["chunk_uid"] = r.get("chunk_uid")
+
+    metadata_json = ensure_json_str(metadata_obj)
+
+    return (
+        str(source_file_name),
+        chunk_index,
+        page_start,
+        page_end,
+        word_count,
+        content,
+        page_spans_json,
+        metadata_json,
+    )
 
 
 def main() -> None:
@@ -97,12 +125,8 @@ def main() -> None:
     parser.add_argument("--db-user", default="admin", help="PostgreSQL username")
     parser.add_argument("--db-password", default="admin", help="PostgreSQL password")
 
-    parser.add_argument("--table", default="rag_chunks", help="Target table")
-    parser.add_argument("--distance", default="cosine", choices=["cosine", "l2", "ip"], help="Distance metric")
     parser.add_argument("--batch-size", type=int, default=256, help="DB upsert batch size")
     args = parser.parse_args()
-
-    table_name = validate_table_name(args.table)
 
     embeddings = np.load(args.embeddings)
     records = load_jsonl(args.records)
@@ -113,6 +137,8 @@ def main() -> None:
         raise ValueError(f"records count ({len(records)}) != embeddings rows ({embeddings.shape[0]})")
 
     dim = int(embeddings.shape[1])
+    if dim != 1024:
+        raise ValueError(f"Expected embedding dim 1024 to match DB schema, got {dim}")
 
     conn = psycopg.connect(
         host=args.db_host,
@@ -121,50 +147,78 @@ def main() -> None:
         user=args.db_user,
         password=args.db_password,
     )
-    try:
-        create_table_and_index(conn, table_name, dim, args.distance)
 
-        query = sql.SQL(
-            """
-            INSERT INTO {table}
-                (id, source_file_name, chunk_id, page_start, page_end, word_count, content, page_spans_json, embedding)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::vector)
-            ON CONFLICT (id) DO UPDATE SET
-                source_file_name = EXCLUDED.source_file_name,
-                chunk_id = EXCLUDED.chunk_id,
-                page_start = EXCLUDED.page_start,
-                page_end = EXCLUDED.page_end,
-                word_count = EXCLUDED.word_count,
-                content = EXCLUDED.content,
-                page_spans_json = EXCLUDED.page_spans_json,
-                embedding = EXCLUDED.embedding,
-                updated_at = NOW();
-            """
-        ).format(table=sql.Identifier(table_name))
+    doc_cache: Dict[str, int] = {}
+
+    try:
+        ensure_schema(conn)
+
+        doc_upsert_sql = (
+            "INSERT INTO documents (source_file, title)\n"
+            "VALUES (%s, %s)\n"
+            "ON CONFLICT (source_file) DO UPDATE\n"
+            "SET updated_at = NOW()\n"
+            "RETURNING id;"
+        )
+
+        chunk_upsert_sql = (
+            "INSERT INTO rag_chunks (\n"
+            "  document_id, chunk_index, page_start, page_end, word_count, content, page_spans_json, metadata, embedding\n"
+            ") VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::vector)\n"
+            "ON CONFLICT (document_id, chunk_index) DO UPDATE SET\n"
+            "  page_start = EXCLUDED.page_start,\n"
+            "  page_end = EXCLUDED.page_end,\n"
+            "  word_count = EXCLUDED.word_count,\n"
+            "  content = EXCLUDED.content,\n"
+            "  page_spans_json = EXCLUDED.page_spans_json,\n"
+            "  metadata = EXCLUDED.metadata,\n"
+            "  embedding = EXCLUDED.embedding,\n"
+            "  updated_at = NOW();"
+        )
 
         total = len(records)
-        inserted = 0
+        upserted = 0
         with conn.cursor() as cur:
             for i in range(0, total, args.batch_size):
                 j = min(i + args.batch_size, total)
-                rows = []
+                chunk_rows = []
+
                 for k in range(i, j):
-                    r = records[k]
-                    rows.append(
+                    (
+                        source_file_name,
+                        chunk_index,
+                        page_start,
+                        page_end,
+                        word_count,
+                        content,
+                        page_spans_json,
+                        metadata_json,
+                    ) = normalize_record(records[k])
+
+                    doc_id = doc_cache.get(source_file_name)
+                    if doc_id is None:
+                        title = derive_title_from_source(source_file_name)
+                        cur.execute(doc_upsert_sql, (source_file_name, title))
+                        doc_id = int(cur.fetchone()[0])
+                        doc_cache[source_file_name] = doc_id
+
+                    chunk_rows.append(
                         (
-                            r["id"],
-                            r["source_file_name"],
-                            int(r["chunk_id"]),
-                            int(r["page_start"]),
-                            int(r["page_end"]),
-                            int(r["word_count"]),
-                            r["content"],
-                            r["page_spans_json"],
+                            doc_id,
+                            chunk_index,
+                            page_start,
+                            page_end,
+                            word_count,
+                            content,
+                            page_spans_json,
+                            metadata_json,
                             vector_to_literal(embeddings[k]),
                         )
                     )
-                cur.executemany(query, rows)
-                inserted += len(rows)
+
+                cur.executemany(chunk_upsert_sql, chunk_rows)
+                upserted += len(chunk_rows)
+
         conn.commit()
     finally:
         conn.close()
@@ -172,10 +226,8 @@ def main() -> None:
     print(f"Embeddings file: {args.embeddings}")
     print(f"Records file: {args.records}")
     print(f"DB: {args.db_host}:{args.db_port}/{args.db_name}")
-    print(f"Table: {table_name}")
-    print(f"Distance: {args.distance}")
     print(f"Embedding dim: {dim}")
-    print(f"Upserted records: {inserted}")
+    print(f"Upserted rag_chunks: {upserted}")
 
 
 if __name__ == "__main__":

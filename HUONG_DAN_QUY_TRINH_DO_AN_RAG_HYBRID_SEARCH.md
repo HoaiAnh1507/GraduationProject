@@ -4,6 +4,64 @@ Tài liệu này mô tả **khung tổng quan** để triển khai đồ án cha
 
 ---
 
+## MÔ TẢ CHI TIẾT ĐỒ ÁN (BẢN GHI NHỚ NGỮ CẢNH)
+
+Mục tiêu của đồ án là xây dựng hệ thống chatbot hỏi đáp lịch sử Việt Nam có khả năng trả lời dựa trên tri thức từ tài liệu nguồn, thay vì trả lời thuần theo trí nhớ tham số của mô hình ngôn ngữ. Cốt lõi kỹ thuật là kết hợp Retrieval-Augmented Generation (RAG) và Hybrid Search để nâng độ chính xác, giảm hallucination và tăng khả năng trích dẫn nguồn.
+
+### 1) Bài toán cần giải quyết
+
+- Dữ liệu lịch sử Việt Nam nằm ở dạng PDF, chất lượng không đồng đều (text-based và scan/image).
+- Người dùng cần hỏi bằng tiếng Việt tự nhiên, có thể đa dạng cách diễn đạt.
+- Hệ thống cần trả lời có căn cứ, ưu tiên bám sát tài liệu nguồn.
+
+### 2) Đầu vào - đầu ra mong muốn
+
+- **Đầu vào**: PDF tài liệu lịch sử + câu hỏi tiếng Việt của người dùng.
+- **Đầu ra**:
+  - Câu trả lời tự nhiên, ngắn gọn, đúng trọng tâm.
+  - Trích dẫn chunk/tài liệu liên quan (ít nhất file + trang/chunk).
+
+### 3) Kiến trúc tư duy của đồ án
+
+- Tách pipeline thành 2 phần độc lập:
+  1. **Offline indexing pipeline**: extract -> chunk -> embedding -> index/store.
+  2. **Online QA pipeline**: query -> retrieve (hybrid) -> generate -> cite.
+
+- Mục tiêu thiết kế:
+  - Có thể thay model embedding/LLM mà không phá vỡ toàn bộ hệ.
+  - Có thể benchmark theo từng tầng (retrieval tách biệt generation).
+
+### 4) Quyết định kỹ thuật đã chốt cho hướng đi hiện tại
+
+- Xử lý dữ liệu chính theo **text-based PDF** để đảm bảo độ chính xác extract.
+- Chunking theo **fixed-size + overlap** để ổn định và dễ benchmark.
+- Chuyển vector store từ Chroma sang **PGVector (PostgreSQL)** để đồng nhất backend.
+- Backend theo hướng **Spring Boot 3.x + monolith** để giảm độ phức tạp triển khai.
+- Chuẩn bị luồng embedding tách rời bằng Kaggle khi máy local thiếu GPU/RAM.
+
+### 5) Trạng thái triển khai tại thời điểm hiện tại
+
+- Đã có pipeline extract/chunk chạy hàng loạt.
+- Đã ingest dữ liệu chunk embedding vào PostgreSQL + pgvector.
+- Đã xử lý phần kết nối DB và migration dependency để tương thích Spring AI.
+- Chưa hoàn chỉnh phần runtime retrieval + generation end-to-end trong backend.
+
+### 6) Những việc còn lại để hoàn tất đồ án
+
+- Cấu hình EmbeddingModel trong backend để chạy PGVector autoconfiguration đúng chuẩn.
+- Hoàn thiện API retrieval (top-k) và API RAG trả lời có citation.
+- Hoàn thiện hybrid search (vector + keyword + fusion).
+- Thiết kế benchmark retrieval (Recall@k) và bộ câu hỏi đánh giá chất lượng trả lời.
+
+### 7) Tiêu chí hoàn thành có thể bảo vệ
+
+- Demo chạy được end-to-end với dữ liệu thật.
+- Có so sánh baseline vs hybrid (ít nhất ở retrieval quality).
+- Câu trả lời có nguồn tham chiếu rõ ràng.
+- Có tài liệu mô tả quy trình tái lập (reproducible workflow).
+
+---
+
 ## 0) Trạng thái hiện tại của nhóm (đã chọn gì, đã làm gì)
 
 Phần này ghi rõ các quyết định và tiến độ hiện tại để đối chiếu với các phương án bên dưới.
