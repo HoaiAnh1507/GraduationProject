@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 .env
+V1__init_core_tables.sql
+V2__backfill_documents_and_link_rag_chunks.sql
+V3__normalize_rag_chunks_drop_legacy_columns.sql

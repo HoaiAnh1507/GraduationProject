@@ -1,0 +1,80 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/* ══ App Theme Variables ════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
+  --t-app-bg:         #0a1223;
+  --t-sidebar-bg:     linear-gradient(180deg, #0d1b2e 0%, #0b1623 100%);
+  --t-topbar-bg:      rgba(10,18,35,0.92);
+  --t-input-area-bg:  rgba(10,18,35,0.82);
+  --t-input-inner-bg: rgba(20,36,65,0.85);
+  --t-msg-bot-bg:     rgba(20,36,65,0.72);
+  --t-card-bg:        rgba(255,255,255,0.03);
+  --t-card-bg2:       rgba(13,27,46,0.72);
+  --t-btn-ghost-bg:   rgba(255,255,255,0.05);
+  --t-user-msg-bg:    rgba(201,168,76,0.16);
+  --t-overlay-bg:     rgba(0,0,0,0.72);
+
+  --t-sidebar-border: rgba(201,168,76,0.15);
+  --t-topbar-border:  rgba(255,255,255,0.06);
+  --t-card-border:    rgba(255,255,255,0.07);
+  --t-input-border:   rgba(255,255,255,0.09);
+  --t-divider:        rgba(255,255,255,0.06);
+  --t-btn-border:     rgba(255,255,255,0.09);
+
+  --t-text-1:         rgba(255,255,255,0.92);
+  --t-text-2:         rgba(255,255,255,0.72);
+  --t-text-3:         rgba(255,255,255,0.45);
+  --t-text-4:         rgba(255,255,255,0.3);
+  --t-text-5:         rgba(255,255,255,0.18);
+
+  --t-gold:           #c9a84c;
+  --t-gold-text:      #e8d5a3;
+  --t-gold-bg:        rgba(201,168,76,0.1);
+  --t-gold-border:    rgba(201,168,76,0.25);
+  --t-gold-bright:    rgba(201,168,76,0.16);
+
+  --t-bot-bg:         linear-gradient(135deg, #1a3a6e, #0d2040);
+  --t-decoration:     radial-gradient(ellipse 80% 50% at 20% 20%, rgba(201,168,76,0.04) 0%, transparent 60%),
+                      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(99,153,255,0.04) 0%, transparent 60%);
+}
+
+[data-theme="light"] {
+  --t-app-bg:         #f5efe0;
+  --t-sidebar-bg:     linear-gradient(180deg, #ede5d5 0%, #e3d9c5 100%);
+  --t-topbar-bg:      rgba(242,236,220,0.96);
+  --t-input-area-bg:  rgba(234,228,212,0.94);
+  --t-input-inner-bg: rgba(255,255,255,0.82);
+  --t-msg-bot-bg:     rgba(255,255,255,0.78);
+  --t-card-bg:        rgba(255,255,255,0.52);
+  --t-card-bg2:       rgba(255,255,255,0.85);
+  --t-btn-ghost-bg:   rgba(0,0,0,0.04);
+  --t-user-msg-bg:    rgba(168,124,42,0.13);
+  --t-overlay-bg:     rgba(20,12,0,0.52);
+
+  --t-sidebar-border: rgba(168,124,42,0.2);
+  --t-topbar-border:  rgba(0,0,0,0.07);
+  --t-card-border:    rgba(0,0,0,0.08);
+  --t-input-border:   rgba(0,0,0,0.11);
+  --t-divider:        rgba(0,0,0,0.07);
+  --t-btn-border:     rgba(0,0,0,0.1);
+
+  --t-text-1:         rgba(10,18,35,0.88);
+  --t-text-2:         rgba(10,18,35,0.65);
+  --t-text-3:         rgba(10,18,35,0.45);
+  --t-text-4:         rgba(10,18,35,0.3);
+  --t-text-5:         rgba(10,18,35,0.18);
+
+  --t-gold:           #a87c2a;
+  --t-gold-text:      #7a5a18;
+  --t-gold-bg:        rgba(168,124,42,0.1);
+  --t-gold-border:    rgba(168,124,42,0.28);
+  --t-gold-bright:    rgba(168,124,42,0.15);
+
+  --t-bot-bg:         linear-gradient(135deg, #b09060, #7a6030);
+  --t-decoration:     radial-gradient(ellipse 80% 50% at 20% 20%, rgba(168,124,42,0.06) 0%, transparent 60%),
+                      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(100,80,200,0.04) 0%, transparent 60%);
+}
