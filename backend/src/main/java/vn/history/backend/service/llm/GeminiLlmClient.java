@@ -1,4 +1,4 @@
-package vn.history.backend.service;
+package vn.history.backend.service.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +27,6 @@ import java.util.Map;
 public class GeminiLlmClient implements LlmClient {
 
     private final boolean enabled;
-    private final String baseUrl;
     private final String apiKey;
     private final String model;
     private final Double temperature;
@@ -42,7 +41,6 @@ public class GeminiLlmClient implements LlmClient {
             @Value("${app.llm.temperature:${APP_LLM_TEMPERATURE:0.2}}") Double temperature
     ) {
         this.enabled = enabled;
-        this.baseUrl = baseUrl;
         this.apiKey = apiKey;
         this.model = model;
         this.temperature = temperature;

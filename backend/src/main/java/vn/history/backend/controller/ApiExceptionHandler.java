@@ -1,4 +1,4 @@
-package vn.history.backend.api;
+package vn.history.backend.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

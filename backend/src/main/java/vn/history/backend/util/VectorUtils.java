@@ -1,13 +1,13 @@
-package vn.history.backend.service;
+package vn.history.backend.util;
 
 import java.util.List;
 
-final class VectorUtils {
+public final class VectorUtils {
 
     private VectorUtils() {
     }
 
-    static String toPgVectorLiteral(List<Double> embedding, int expectedDim) {
+    public static String toPgVectorLiteral(List<Double> embedding, int expectedDim) {
         if (embedding == null) {
             throw new IllegalArgumentException("queryEmbedding is null");
         }

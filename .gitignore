@@ -16,6 +16,13 @@ backend/mvnw.cmd
 *.jar
 *.war
 
+# FRONTEND (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+frontend/build/
+
 # Bỏ qua file cấu hình IDE
 .idea/
 .vscode/

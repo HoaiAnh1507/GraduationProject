@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import vn.history.backend.dto.retrieval.RetrievedChunkDto;
 import vn.history.backend.dto.retrieval.RetrievalSearchResponse;
 import vn.history.backend.repository.RagChunksRepository;
+import vn.history.backend.util.VectorUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;

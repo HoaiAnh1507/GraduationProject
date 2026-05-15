@@ -1,4 +1,4 @@
-package vn.history.backend.service;
+package vn.history.backend.service.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;

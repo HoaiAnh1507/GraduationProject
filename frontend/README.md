@@ -1,7 +1,7 @@
 
-  # FinalProject (Copy)
+  # FinalProject
 
-  This is a code bundle for FinalProject (Copy). The original project is available at https://www.figma.com/design/AayHccVA5ewwTDdfmjZoyU/FinalProject--Copy-.
+  This is a code bundle for FinalProject. The original project is available at https://www.figma.com/design/AayHccVA5ewwTDdfmjZoyU/FinalProject--Copy-.
 
   ## Running the code
 

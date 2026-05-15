@@ -1,4 +1,4 @@
-package vn.history.backend.service;
+package vn.history.backend.service.llm;
 
 public interface LlmClient {
 

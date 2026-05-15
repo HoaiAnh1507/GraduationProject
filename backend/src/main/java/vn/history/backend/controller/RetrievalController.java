@@ -1,4 +1,4 @@
-package vn.history.backend.api;
+package vn.history.backend.controller;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
