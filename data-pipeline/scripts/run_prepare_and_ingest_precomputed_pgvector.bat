@@ -23,7 +23,7 @@ set BATCH_SIZE=%~8
 
 if "%DB_HOST%"=="" set DB_HOST=localhost
 if "%DB_PORT%"=="" set DB_PORT=5432
-if "%DB_NAME%"=="" set DB_NAME=history_rag
+if "%DB_NAME%"=="" set DB_NAME=chatbot_history_rag
 if "%DB_USER%"=="" set DB_USER=admin
 if "%DB_PASSWORD%"=="" set DB_PASSWORD=admin
 if "%TABLE_NAME%"=="" set TABLE_NAME=rag_chunks

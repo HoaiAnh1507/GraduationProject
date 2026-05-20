@@ -121,7 +121,7 @@ def main() -> None:
 
     parser.add_argument("--db-host", default="localhost", help="PostgreSQL host")
     parser.add_argument("--db-port", type=int, default=5432, help="PostgreSQL port")
-    parser.add_argument("--db-name", default="history_rag", help="PostgreSQL database name")
+    parser.add_argument("--db-name", default="chatbot_history_rag", help="PostgreSQL database name")
     parser.add_argument("--db-user", default="admin", help="PostgreSQL username")
     parser.add_argument("--db-password", default="admin", help="PostgreSQL password")
 
