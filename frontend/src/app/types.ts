@@ -6,6 +6,13 @@ export interface Citation {
   page?: number;
   chunkId?: string;
   excerpt: string;
+
+  // Backend linkage (optional so mock data still works)
+  documentId?: string | number;
+  sourceFile?: string;
+  title?: string;
+  pageStart?: number;
+  pageEnd?: number;
 }
 
 export interface Flashcard {

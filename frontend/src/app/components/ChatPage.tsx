@@ -6,8 +6,8 @@ import { MessageLoadingSkeleton } from "./LoadingSkeleton";
 import { EmptyState } from "./EmptyState";
 import { ChatInput } from "./ChatInput";
 import { PDFViewerModal } from "./PDFViewerModal";
-import { SIMULATED_RESPONSE } from "../mockData";
 import { motion, AnimatePresence } from "motion/react";
+import { backendApi } from "../api/backendApi";
 
 interface ChatPageProps {
   conversation: Conversation | null;
@@ -17,7 +17,7 @@ interface ChatPageProps {
 let msgIdCounter = 1000;
 const newId = () => `msg_${++msgIdCounter}`;
 
-function TopBar({ title }: { title: string }) {
+function TopBar({ title, documentCount }: { title: string; documentCount?: number }) {
   return (
     <div
       className="flex items-center justify-between px-6 py-3 flex-shrink-0"
@@ -52,7 +52,9 @@ function TopBar({ title }: { title: string }) {
           style={{ background: "rgba(99,153,255,0.08)", border: "1px solid rgba(99,153,255,0.15)" }}
         >
           <Database size={11} style={{ color: "#6399ff" }} />
-          <span className="text-xs" style={{ color: "rgba(99,153,255,0.8)" }}>12 tài liệu</span>
+          <span className="text-xs" style={{ color: "rgba(99,153,255,0.8)" }}>
+            {documentCount ?? 0} tài liệu
+          </span>
         </div>
 
         <button
@@ -78,6 +80,8 @@ function TopBar({ title }: { title: string }) {
 export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [openPDFCitation, setOpenPDFCitation] = useState<Citation | null>(null);
+  const [documentCount, setDocumentCount] = useState<number | undefined>(undefined);
+  const [documentsByBaseName, setDocumentsByBaseName] = useState<Map<string, number>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const messages = conversation?.messages ?? [];
@@ -90,7 +94,29 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const handleSend = (text: string) => {
+  useEffect(() => {
+    let cancelled = false;
+    backendApi
+      .listDocuments()
+      .then((docs) => {
+        if (cancelled) return;
+        setDocumentCount(docs.length);
+        const map = new Map<string, number>();
+        for (const d of docs) {
+          map.set(backendApi.basename(d.sourceFile), d.id);
+        }
+        setDocumentsByBaseName(map);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDocumentCount(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSend = async (text: string) => {
     if (!conversation) return;
 
     const userMsg: Message = {
@@ -115,37 +141,55 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
     onUpdateConversation(updatedWithUser);
     setIsLoading(true);
 
-    setTimeout(() => {
+    try {
+      const resp = await backendApi.askChat(text);
+
+      const citations: Citation[] = (resp.citations ?? []).map((c, i) => {
+        const fileName = backendApi.basename(c.sourceFile);
+        return {
+          id: `c_${c.chunkId}_${i}`,
+          fileName,
+          page: c.pageStart,
+          chunkId: String(c.chunkId),
+          excerpt: c.quote ?? "",
+          documentId: c.documentId,
+          sourceFile: c.sourceFile,
+          title: c.title,
+          pageStart: c.pageStart,
+          pageEnd: c.pageEnd,
+        };
+      });
+
       const assistantMsg: Message = {
         id: newId(),
         role: "assistant",
-        content: SIMULATED_RESPONSE.content,
+        content: resp.answer,
         timestamp: new Date(),
-        hasCitations: true,
-        citations: SIMULATED_RESPONSE.citations,
-        suggestedFlashcards: SIMULATED_RESPONSE.suggestedFlashcards,
-        relatedTopics: [
-          {
-            id: "rt1",
-            title: "Hệ thống RAG trong NLP",
-            description: "Kiến trúc Retrieval-Augmented Generation kết hợp tìm kiếm tài liệu với sinh ngôn ngữ, giúp tăng độ chính xác và khả năng trích dẫn nguồn.",
-            tags: ["RAG", "NLP", "AI"],
-          },
-          {
-            id: "rt2",
-            title: "Hybrid Search – BM25 + Dense Retrieval",
-            description: "Kết hợp tìm kiếm thưa (BM25 keyword) và tìm kiếm dày (vector embedding) cho kết quả tốt hơn bất kỳ phương pháp đơn lẻ nào.",
-            tags: ["Search", "BM25", "Embedding"],
-          },
-        ],
+        hasCitations: citations.length > 0,
+        citations,
       };
 
       onUpdateConversation({
         ...updatedWithUser,
         messages: [...updatedWithUser.messages, assistantMsg],
       });
+    } catch (e) {
+      const assistantMsg: Message = {
+        id: newId(),
+        role: "assistant",
+        content:
+          "Không thể gọi backend (/api/chat/ask). Hãy kiểm tra backend đang chạy và Vite proxy đang trỏ đúng cổng.",
+        timestamp: new Date(),
+        isError: true,
+        hasCitations: false,
+      };
+      onUpdateConversation({
+        ...updatedWithUser,
+        messages: [...updatedWithUser.messages, assistantMsg],
+      });
+    } finally {
       setIsLoading(false);
-    }, 2200);
+    }
   };
 
   const handleFeedback = (msgId: string, type: "helpful" | "not_helpful") => {
@@ -176,7 +220,7 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title={conversation?.title ?? ""} />
+      <TopBar title={conversation?.title ?? ""} documentCount={documentCount} />
 
       {/* Messages area */}
       <div
@@ -206,7 +250,11 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
                   onFeedback={handleFeedback}
                   onRetry={handleRetry}
                   onExploreRelated={handleExploreRelated}
-                  onOpenPDF={(citation) => setOpenPDFCitation(citation)}
+                  onOpenPDF={(citation) => {
+                    const resolvedId =
+                      citation.documentId ?? documentsByBaseName.get(citation.fileName);
+                    setOpenPDFCitation({ ...citation, documentId: resolvedId ?? citation.documentId });
+                  }}
                 />
               ))}
               {isLoading && <MessageLoadingSkeleton />}

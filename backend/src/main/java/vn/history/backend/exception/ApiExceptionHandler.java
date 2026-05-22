@@ -12,6 +12,11 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    @ExceptionHandler(UpstreamServiceException.class)
+    public ResponseEntity<Map<String, Object>> upstream(UpstreamServiceException e) {
+        return error(HttpStatus.BAD_GATEWAY, e.getMessage());
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, Object>> notFound(NotFoundException e) {
         return error(HttpStatus.NOT_FOUND, e.getMessage());

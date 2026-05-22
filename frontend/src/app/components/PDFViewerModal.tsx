@@ -2,48 +2,42 @@ import { useState, useEffect } from "react";
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, FileText, Maximize2 } from "lucide-react";
 import { Citation } from "../types";
 import { motion, AnimatePresence } from "motion/react";
+import { backendApi } from "../api/backendApi";
 
 interface PDFViewerModalProps {
   citation: Citation | null;
   onClose: () => void;
 }
 
-// Generate surrounding text for realistic page simulation
-function generatePageContent(citation: Citation): { before: string; highlight: string; after: string } {
-  const surroundingTexts: Record<string, { before: string; after: string }> = {
-    "Lịch sử Việt Nam – Tập 3 (1945–1975).pdf": {
-      before: "Sau những thất bại liên tiếp ở chiến trường miền Nam, Bộ Tư lệnh Quân lực Việt Nam Cộng hòa rơi vào tình trạng hoang mang, mất phương hướng. Các tướng lĩnh cao cấp tìm cách tháo chạy, để lại hàng vạn binh sĩ không người chỉ huy. Trong bối cảnh đó, tại Hà Nội, các nhà lãnh đạo Đảng và Nhà nước đã họp khẩn để đánh giá tình hình và đề ra quyết sách chiến lược cho giai đoạn cuối của cuộc kháng chiến.",
-      after: "Quyết định đó được cụ thể hóa thành mệnh lệnh cho các đơn vị chiến đấu: \"Thần tốc, thần tốc hơn nữa – Táo bạo, táo bạo hơn nữa – Tranh thủ từng giờ, từng phút – Xốc tới mặt trận – Giải phóng miền Nam – Quyết chiến và toàn thắng\". Các quân đoàn chủ lực nhận được lệnh hành quân gấp về phía Sài Gòn.",
-    },
-    "Đại thắng Mùa Xuân 1975 – Văn Tiến Dũng.pdf": {
-      before: "Ngày 26 tháng 4, tất cả các hướng đồng loạt nổ súng. Pháo binh ta bắn phá dữ dội vào các căn cứ phòng thủ vòng ngoài của địch. Từng mũi tiến công thọc sâu, tiêu diệt các chốt địch, mở đường cho xe tăng và bộ binh tiến vào nội đô. Khí thế chiến đấu của bộ đội ta như triều dâng sóng vỡ.",
-      after: "Ngay trong đêm 26 rạng ngày 27, toàn bộ các tuyến phòng thủ vòng ngoài của địch bị đột phá hoặc vô hiệu hóa. Sáng ngày 27, các cánh quân ta tiếp tục thừa thắng truy kích, tiêu diệt và làm tan rã nhiều đơn vị địch, tiến sát đến các cửa ngõ Sài Gòn.",
-    },
-    "Lịch sử Việt Nam Cổ-Trung đại – NXB Giáo Dục.pdf": {
-      before: "Sau khi lên ngôi, Lý Công Uẩn – người xuất thân từ đất Cổ Pháp (Bắc Ninh ngày nay) – nhận thấy Hoa Lư, kinh đô cũ, không còn phù hợp với yêu cầu phát triển của đất nước. Thành Hoa Lư nằm trong vùng núi non hiểm trở, chỉ thích hợp cho phòng thủ quân sự mà không thuận tiện cho việc giao thương và quản lý đất nước trong thời bình.",
-      after: "Thăng Long – nghĩa là \"Rồng bay lên\" – từ đó trở thành kinh đô của Đại Việt trong suốt nhiều thế kỷ. Thành được xây dựng với quy mô hoành tráng, gồm ba vòng thành: Đại Nội (nơi ở của vua), Hoàng thành và La thành bao bọc toàn bộ kinh đô.",
-    },
-  };
-
-  const textSet = surroundingTexts[citation.fileName] || {
-    before: "Theo các tài liệu lịch sử được lưu trữ, sự kiện này đánh dấu một bước ngoặt quan trọng trong tiến trình lịch sử dân tộc. Các nhà nghiên cứu đã dày công tìm hiểu và phân tích nhiều nguồn tư liệu khác nhau để có thể dựng lại bức tranh toàn cảnh về giai đoạn lịch sử đặc biệt này.",
-    after: "Những sự kiện tiếp theo cho thấy tầm quan trọng và ảnh hưởng lâu dài của quyết định này đối với cục diện lịch sử. Hậu thế nhìn lại không khỏi thán phục trước tầm nhìn chiến lược và sự dũng cảm của những người đã đưa ra quyết định trong thời điểm đó.",
-  };
-
-  return {
-    before: textSet.before,
-    highlight: citation.excerpt,
-    after: textSet.after,
-  };
-}
-
 export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
   const [currentPage, setCurrentPage] = useState(citation?.page ?? 1);
   const [zoom, setZoom] = useState(100);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
 
   useEffect(() => {
     if (citation?.page) setCurrentPage(citation.page);
   }, [citation]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!citation?.documentId) {
+      setTotalPages(null);
+      return;
+    }
+    backendApi
+      .getDocument(citation.documentId)
+      .then((doc) => {
+        if (cancelled) return;
+        setTotalPages(doc.totalPages ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTotalPages(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [citation?.documentId]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -55,8 +49,10 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
 
   if (!citation) return null;
 
-  const totalPages = Math.max(citation.page ? citation.page + 20 : 50, 50);
-  const pageContent = generatePageContent(citation);
+  const fallbackTotalPages = Math.max(citation.page ? citation.page + 20 : 50, 50);
+  const effectiveTotalPages = totalPages ?? fallbackTotalPages;
+  const pdfUrl = citation.documentId ? backendApi.pdfUrl(citation.documentId) : null;
+  const pdfSrc = pdfUrl ? `${pdfUrl}#page=${currentPage}` : null;
 
   return (
     <AnimatePresence>
@@ -98,7 +94,7 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                 {citation.fileName}
               </p>
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
-                Trang {currentPage} / {totalPages} · {citation.chunkId}
+                Trang {currentPage} / {effectiveTotalPages} · {citation.chunkId}
               </p>
             </div>
 
@@ -134,6 +130,10 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:bg-white/[0.06]"
                 style={{ color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}
                 title="Tải xuống"
+                onClick={() => {
+                  if (!pdfUrl) return;
+                  window.open(pdfUrl, "_blank", "noopener,noreferrer");
+                }}
               >
                 <Download size={13} />
               </button>
@@ -155,7 +155,7 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
               className="w-20 flex-shrink-0 flex flex-col gap-2 p-2 overflow-y-auto"
               style={{ borderRight: "1px solid rgba(255,255,255,0.06)", background: "rgba(6,12,24,0.8)" }}
             >
-              {Array.from({ length: Math.min(8, totalPages) }, (_, i) => {
+              {Array.from({ length: Math.min(8, effectiveTotalPages) }, (_, i) => {
                 const pg = Math.max(1, (citation.page ?? 1) - 3 + i);
                 const isActive = pg === currentPage;
                 return (
@@ -215,120 +215,39 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.2 }}
                 style={{
-                  width: `${zoom}%`,
+                  width: "100%",
+                  maxWidth: "900px",
                   minWidth: "300px",
-                  maxWidth: "650px",
-                  background: "rgba(240, 235, 220, 0.96)",
-                  borderRadius: "4px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-                  padding: "48px 56px",
                   minHeight: "500px",
                 }}
               >
-                {/* Page header */}
                 <div
-                  className="flex items-center justify-between pb-4 mb-5"
-                  style={{ borderBottom: "1px solid rgba(0,0,0,0.15)" }}
+                  className="w-full rounded"
+                  style={{
+                    background: "rgba(240, 235, 220, 0.96)",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                    overflow: "hidden",
+                  }}
                 >
-                  <span
-                    className="text-xs"
-                    style={{ color: "rgba(60,40,20,0.5)", fontFamily: "Georgia, serif" }}
-                  >
-                    {citation.fileName.replace(".pdf", "")}
-                  </span>
-                  <span
-                    className="text-xs"
-                    style={{ color: "rgba(60,40,20,0.5)", fontFamily: "Georgia, serif" }}
-                  >
-                    Trang {currentPage}
-                  </span>
-                </div>
-
-                {/* Page content */}
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                  {/* Section heading (simulated) */}
-                  <h3
-                    className="mb-4"
-                    style={{
-                      color: "#1a0e00",
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      letterSpacing: "0.02em",
-                    }}
-                  >
-                    {currentPage === citation.page
-                      ? `Chương ${Math.floor((citation.page ?? 1) / 30) + 1}: Giai đoạn lịch sử quan trọng`
-                      : `Nội dung trang ${currentPage}`}
-                  </h3>
-
-                  {/* Before text */}
-                  <p
-                    className="mb-4 leading-loose text-sm"
-                    style={{ color: "#2a1a0a", textAlign: "justify" }}
-                  >
-                    {currentPage === citation.page ? pageContent.before : "Nội dung trang này tiếp tục phân tích các sự kiện lịch sử quan trọng. Các tư liệu gốc được sưu tầm từ nhiều nguồn khác nhau, đảm bảo tính khách quan và toàn diện trong việc trình bày lịch sử dân tộc."}
-                  </p>
-
-                  {/* Highlighted excerpt */}
-                  {currentPage === citation.page && (
-                    <div className="my-4 relative">
-                      <p
-                        className="leading-loose text-sm px-4 py-3 rounded"
-                        style={{
-                          color: "#1a0800",
-                          textAlign: "justify",
-                          background: "rgba(201,168,76,0.25)",
-                          border: "2px solid rgba(201,168,76,0.6)",
-                          borderLeft: "4px solid #c9a84c",
-                          boxShadow: "0 0 0 3px rgba(201,168,76,0.1)",
-                        }}
-                      >
-                        {pageContent.highlight}
-                      </p>
-                      {/* Highlight label */}
-                      <div
-                        className="absolute -top-2.5 left-3 px-2 py-0.5 rounded text-xs"
-                        style={{ background: "#c9a84c", color: "#1a0800", fontFamily: "sans-serif", fontWeight: 600 }}
-                      >
-                        Đoạn trích dẫn
-                      </div>
+                  {pdfSrc ? (
+                    <div
+                      style={{
+                        transform: `scale(${zoom / 100})`,
+                        transformOrigin: "top center",
+                        width: "100%",
+                      }}
+                    >
+                      <iframe
+                        title={citation.fileName}
+                        src={pdfSrc}
+                        style={{ width: "100%", height: "900px", border: "none" }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-6" style={{ color: "rgba(60,40,20,0.7)" }}>
+                      Không thể hiển thị PDF vì thiếu `documentId`.
                     </div>
                   )}
-
-                  {/* After text */}
-                  {currentPage === citation.page && (
-                    <p
-                      className="mt-4 leading-loose text-sm"
-                      style={{ color: "#2a1a0a", textAlign: "justify" }}
-                    >
-                      {pageContent.after}
-                    </p>
-                  )}
-
-                  {/* Footnote area */}
-                  <div
-                    className="mt-10 pt-4"
-                    style={{ borderTop: "1px solid rgba(0,0,0,0.15)" }}
-                  >
-                    {[1, 2].map((fn) => (
-                      <p key={fn} className="text-xs mb-1" style={{ color: "rgba(60,40,20,0.5)", fontFamily: "Georgia, serif" }}>
-                        {fn}. Chú thích học thuật số {fn} – tham khảo tài liệu bổ sung liên quan đến nội dung đoạn văn trên.
-                      </p>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Page footer */}
-                <div
-                  className="flex items-center justify-center mt-8 pt-4"
-                  style={{ borderTop: "1px solid rgba(0,0,0,0.1)" }}
-                >
-                  <span
-                    className="text-xs"
-                    style={{ color: "rgba(60,40,20,0.4)", fontFamily: "Georgia, serif" }}
-                  >
-                    — {currentPage} —
-                  </span>
                 </div>
               </motion.div>
             </div>
@@ -365,10 +284,10 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                 <ChevronLeft size={14} />
               </button>
               <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                {currentPage} / {totalPages}
+                {currentPage} / {effectiveTotalPages}
               </span>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setCurrentPage((p) => Math.min(effectiveTotalPages, p + 1))}
                 className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/[0.06]"
                 style={{ color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}
               >
