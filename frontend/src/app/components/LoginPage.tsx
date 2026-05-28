@@ -42,10 +42,20 @@ export function LoginPage() {
       if (!name.trim()) return setError("Vui lòng nhập họ tên.");
       if (password.length < 6) return setError("Mật khẩu phải có ít nhất 6 ký tự.");
       if (password !== confirmPassword) return setError("Mật khẩu xác nhận không khớp.");
-      await register(name.trim(), email.trim(), password);
+      try {
+        await register(name.trim(), email.trim(), password);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Đăng ký thất bại. Vui lòng thử lại.");
+        return;
+      }
     } else {
       if (!email.trim() || !password) return setError("Vui lòng nhập đầy đủ thông tin.");
-      await loginWithEmail(email.trim(), password);
+      try {
+        await loginWithEmail(email.trim(), password);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Đăng nhập thất bại. Vui lòng thử lại.");
+        return;
+      }
     }
     navigate("/");
   };

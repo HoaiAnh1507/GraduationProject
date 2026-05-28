@@ -1,19 +1,60 @@
 -- Fresh schema for PostgreSQL + PGVector (new database)
--- Includes all core tables and a normalized rag_chunks structure aligned with the data-pipeline.
+-- Final schema (users + auth + conversations + RAG tables)
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
--- 1) app_users
-CREATE TABLE IF NOT EXISTS app_users (
+-- 1) users (common user profile)
+CREATE TABLE IF NOT EXISTS users (
     id                BIGSERIAL PRIMARY KEY,
-    username          TEXT NOT NULL UNIQUE,
+    username          TEXT UNIQUE,
     display_name      TEXT,
     email             TEXT UNIQUE,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    avatar_url        TEXT,
+    email_verified    BOOLEAN NOT NULL DEFAULT false,
+    status            TEXT NOT NULL DEFAULT 'active',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at     TIMESTAMPTZ
 );
 
--- 2) documents
+-- 2) local_credentials (email/password login)
+CREATE TABLE IF NOT EXISTS local_credentials (
+    user_id             BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    password_hash       TEXT NOT NULL,
+    password_updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3) user_identities (Google login link; extensible later)
+CREATE TABLE IF NOT EXISTS user_identities (
+    id                 BIGSERIAL PRIMARY KEY,
+    user_id            BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider           TEXT NOT NULL CHECK (provider IN ('google')),
+    provider_subject   TEXT NOT NULL,
+    email_at_link_time TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at      TIMESTAMPTZ,
+    UNIQUE (provider, provider_subject),
+    UNIQUE (user_id, provider)
+);
+
+-- 4) refresh_tokens (long-lived login sessions, supports logout/revoke)
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at   TIMESTAMPTZ NOT NULL,
+    revoked_at   TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    user_agent   TEXT,
+    ip_hash      TEXT,
+    UNIQUE (token_hash)
+);
+
+-- 5) documents
 CREATE TABLE IF NOT EXISTS documents (
     id                BIGSERIAL PRIMARY KEY,
     source_file       TEXT NOT NULL UNIQUE,
@@ -26,7 +67,7 @@ CREATE TABLE IF NOT EXISTS documents (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3) rag_chunks (normalized)
+-- 6) rag_chunks (normalized)
 -- Keying: (document_id, chunk_index)
 CREATE TABLE IF NOT EXISTS rag_chunks (
     id               BIGSERIAL PRIMARY KEY,
@@ -52,19 +93,19 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
     UNIQUE (document_id, chunk_index)
 );
 
--- 4) chat_sessions
-CREATE TABLE IF NOT EXISTS chat_sessions (
+-- 7) conversations
+CREATE TABLE IF NOT EXISTS conversations (
     id                BIGSERIAL PRIMARY KEY,
-    user_id           BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+    user_id           BIGINT REFERENCES users(id) ON DELETE SET NULL,
     title             TEXT,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5) chat_messages
+-- 8) chat_messages
 CREATE TABLE IF NOT EXISTS chat_messages (
     id                BIGSERIAL PRIMARY KEY,
-    session_id        BIGINT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    conversation_id   BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     role              TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
     content           TEXT NOT NULL,
     model_name        TEXT,
@@ -74,10 +115,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 6) flashcards
+-- 9) flashcards
 CREATE TABLE IF NOT EXISTS flashcards (
     id                BIGSERIAL PRIMARY KEY,
-    user_id           BIGINT REFERENCES app_users(id) ON DELETE CASCADE,
+    user_id           BIGINT REFERENCES users(id) ON DELETE CASCADE,
     chunk_id          BIGINT REFERENCES rag_chunks(id) ON DELETE SET NULL,
     question          TEXT NOT NULL,
     answer            TEXT NOT NULL,
@@ -87,7 +128,7 @@ CREATE TABLE IF NOT EXISTS flashcards (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 7) answer_citations
+-- 10) answer_citations
 CREATE TABLE IF NOT EXISTS answer_citations (
     id                BIGSERIAL PRIMARY KEY,
     assistant_msg_id  BIGINT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
@@ -98,7 +139,7 @@ CREATE TABLE IF NOT EXISTS answer_citations (
     end_char          INTEGER
 );
 
--- 8) message_feedback
+-- 11) message_feedback
 CREATE TABLE IF NOT EXISTS message_feedback (
     id                BIGSERIAL PRIMARY KEY,
     message_id        BIGINT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
@@ -112,8 +153,11 @@ CREATE TABLE IF NOT EXISTS message_feedback (
 CREATE INDEX IF NOT EXISTS idx_documents_source_file       ON documents(source_file);
 CREATE INDEX IF NOT EXISTS idx_rag_chunks_document_id      ON rag_chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_rag_chunks_tsv              ON rag_chunks USING GIN (chunk_tsv);
-CREATE INDEX IF NOT EXISTS idx_chat_sessions_user          ON chat_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session_time  ON chat_messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_user_identities_user        ON user_identities(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_expires ON refresh_tokens(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires      ON refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_user          ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_time  ON chat_messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_flashcards_user             ON flashcards(user_id);
 CREATE INDEX IF NOT EXISTS idx_answer_citations_msg        ON answer_citations(assistant_msg_id);
 
@@ -145,6 +189,16 @@ CREATE TRIGGER trg_documents_updated_at
 BEFORE UPDATE ON documents
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_local_credentials_updated_at ON local_credentials;
+CREATE TRIGGER trg_local_credentials_updated_at
+BEFORE UPDATE ON local_credentials
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 DROP TRIGGER IF EXISTS trg_rag_chunks_chunk_tsv ON rag_chunks;
 CREATE TRIGGER trg_rag_chunks_chunk_tsv
 BEFORE INSERT OR UPDATE OF content ON rag_chunks
@@ -155,9 +209,9 @@ CREATE TRIGGER trg_rag_chunks_updated_at
 BEFORE UPDATE ON rag_chunks
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-DROP TRIGGER IF EXISTS trg_chat_sessions_updated_at ON chat_sessions;
-CREATE TRIGGER trg_chat_sessions_updated_at
-BEFORE UPDATE ON chat_sessions
+DROP TRIGGER IF EXISTS trg_conversations_updated_at ON conversations;
+CREATE TRIGGER trg_conversations_updated_at
+BEFORE UPDATE ON conversations
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 DROP TRIGGER IF EXISTS trg_flashcards_updated_at ON flashcards;

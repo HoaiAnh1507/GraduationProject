@@ -9,8 +9,8 @@ echo.
 cd /d "%~dp0"
 
 set RAW_DIR=..\data\raw
-set PROCESSED_DIR=..\data\processed
-set SCAN_JSON=..\data\processed\readable_scan_result.json
+set PROCESSED_DIR=..\data\processed\extracted
+set SCAN_JSON=..\data\processed\extracted\readable_scan_result.json
 set MAX_PAGES=%~1
 set TEST_PAGE_INDEX=%~2
 

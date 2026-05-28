@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { backendApi } from "../api/backendApi";
 
 export interface AppUser {
-  id: string;
+  id: number;
   name: string;
   email: string;
   avatarUrl?: string;
@@ -15,7 +16,7 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -28,15 +29,6 @@ function getInitials(name: string): string {
     .toUpperCase()
     .slice(0, 2);
 }
-
-const MOCK_GOOGLE_USER: AppUser = {
-  id: "google_001",
-  name: "Nguyễn Văn An",
-  email: "an.nguyen@gmail.com",
-  avatarUrl: undefined,
-  provider: "google",
-  initials: "NA",
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
@@ -56,50 +48,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async (): Promise<void> => {
-    setIsLoading(true);
-    // Simulate OAuth round-trip
-    await new Promise((r) => setTimeout(r, 1200));
-    persist(MOCK_GOOGLE_USER);
-    setIsLoading(false);
+    throw new Error("Google login is not wired yet");
   };
 
-  const loginWithEmail = async (email: string, _password: string): Promise<void> => {
+  const loginWithEmail = async (email: string, password: string): Promise<void> => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
-    // Mock: accept any credentials
-    const name = email.split("@")[0].replace(/[._]/g, " ");
-    const formatted = name
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-    const u: AppUser = {
-      id: `email_${Date.now()}`,
-      name: formatted,
-      email,
-      provider: "email",
-      initials: getInitials(formatted),
-    };
-    persist(u);
-    setIsLoading(false);
+    try {
+      const resp = await backendApi.login({ email, password });
+      const displayName = resp.displayName || email.split("@")[0];
+      persist({
+        id: resp.userId,
+        name: displayName,
+        email: resp.email,
+        provider: "email",
+        initials: getInitials(displayName),
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const register = async (name: string, email: string, _password: string): Promise<void> => {
+  const register = async (name: string, email: string, password: string): Promise<void> => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    const u: AppUser = {
-      id: `email_${Date.now()}`,
-      name,
-      email,
-      provider: "email",
-      initials: getInitials(name),
-    };
-    persist(u);
-    setIsLoading(false);
+    try {
+      const resp = await backendApi.register({ email, password, displayName: name });
+      const displayName = resp.displayName || name || email.split("@")[0];
+      persist({
+        id: resp.userId,
+        name: displayName,
+        email: resp.email,
+        provider: "email",
+        initials: getInitials(displayName),
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await backendApi.logout();
     persist(null);
   };
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    backendApi
+      .me()
+      .then((profile) => {
+        if (!active) return;
+        const displayName = profile.displayName || profile.username || profile.email.split("@")[0];
+        persist({
+          id: profile.id,
+          name: displayName,
+          email: profile.email,
+          provider: "email",
+          initials: getInitials(displayName),
+        });
+      })
+      .catch(() => {
+        if (active) persist(null);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, loginWithGoogle, loginWithEmail, register, logout }}>
