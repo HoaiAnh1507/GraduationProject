@@ -45,15 +45,53 @@ export interface ProfileResponse {
   updatedAt: string;
 }
 
+export interface ConversationSummary {
+  id: number;
+  title: string | null;
+  lastMessageAt: string | null;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationDetail {
+  id: number;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  modelName: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  latencyMs: number | null;
+  createdAt: string;
+  citations?: BackendCitationDto[];
+}
+
 function basename(p: string): string {
   if (!p) return p;
   const parts = p.split(/[/\\]/g);
   return parts[parts.length - 1] || p;
 }
 
-async function httpJson<T>(url: string, init?: RequestInit): Promise<T> {
+const AUTH_EXEMPT = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout"];
+
+async function httpJson<T>(url: string, init?: RequestInit, retry = true): Promise<T> {
   const resp = await fetch(url, { credentials: "include", ...init });
   if (!resp.ok) {
+    if (resp.status === 401 && retry && !AUTH_EXEMPT.includes(url)) {
+      try {
+        await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+        return httpJson<T>(url, init, false);
+      } catch {
+        // fall through
+      }
+    }
     const text = await resp.text().catch(() => "");
     throw new Error(text || `HTTP ${resp.status}`);
   }
@@ -78,11 +116,11 @@ export const backendApi = {
     return httpJson<DocumentDetail>(`/api/documents/${documentId}`);
   },
 
-  askChat(query: string, topK?: number): Promise<ChatAskResponse> {
+  askChat(query: string, conversationId: number, topK?: number): Promise<ChatAskResponse> {
     return httpJson<ChatAskResponse>("/api/chat/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, topK }),
+      body: JSON.stringify({ query, topK, conversationId }),
     });
   },
 
@@ -116,5 +154,38 @@ export const backendApi = {
 
   me(): Promise<ProfileResponse> {
     return httpJson<ProfileResponse>("/api/me");
+  },
+
+  listConversations(): Promise<ConversationSummary[]> {
+    return httpJson<ConversationSummary[]>("/api/conversations");
+  },
+
+  createConversation(payload: { title?: string | null }): Promise<ConversationDetail> {
+    return httpJson<ConversationDetail>("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  updateConversation(id: number, payload: { title?: string | null }): Promise<ConversationDetail> {
+    return httpJson<ConversationDetail>(`/api/conversations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteConversation(id: number): Promise<void> {
+    return httpJson<void>(`/api/conversations/${id}`, { method: "DELETE" });
+  },
+
+  listConversationMessages(id: number, params?: { limit?: number; before?: string; after?: string }): Promise<ConversationMessage[]> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.before) query.set("before", params.before);
+    if (params?.after) query.set("after", params.after);
+    const qs = query.toString();
+    return httpJson<ConversationMessage[]>(`/api/conversations/${id}/messages${qs ? `?${qs}` : ""}`);
   },
 };

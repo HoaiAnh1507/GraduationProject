@@ -17,6 +17,34 @@ public class ChatMessagesRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+        public long insertMessage(
+            long conversationId,
+            String role,
+            String content,
+            String modelName,
+            Integer promptTokens,
+            Integer completionTokens,
+            Integer latencyMs
+        ) {
+        final String sql = """
+            INSERT INTO chat_messages (
+              conversation_id, role, content, model_name, prompt_tokens, completion_tokens, latency_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """;
+        return jdbcTemplate.queryForObject(
+            sql,
+            Long.class,
+            conversationId,
+            role,
+            content,
+            modelName,
+            promptTokens,
+            completionTokens,
+            latencyMs
+        );
+        }
+
     public List<MessageRow> listMessages(long conversationId, Instant after, Instant before, int limit, boolean newestFirst) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT id, role, content, model_name, prompt_tokens, completion_tokens, latency_ms, created_at ")

@@ -6,8 +6,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { LESSON_CONTENTS, POPULAR_TOPICS } from "../mockData";
-import { useApp, newConvId } from "../context/AppContext";
-import { Conversation } from "../types";
+import { useApp } from "../context/AppContext";
 
 function parseMarkdown(text: string): string {
   return text
@@ -19,7 +18,7 @@ function parseMarkdown(text: string): string {
 export function LessonPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const navigate = useNavigate();
-  const { setConversations, setActiveConversationId } = useApp();
+  const { createConversation } = useApp();
 
   const lesson = LESSON_CONTENTS.find((l) => l.id === topicId);
   const [activeSection, setActiveSection] = useState<string>("overview");
@@ -59,16 +58,8 @@ export function LessonPage() {
     setIsChatLoading(false);
   };
 
-  const handleOpenFullChat = () => {
-    const newConv: Conversation = {
-      id: newConvId(),
-      title: lesson.title,
-      lastMessage: "",
-      timestamp: new Date(),
-      messages: [],
-    };
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveConversationId(newConv.id);
+  const handleOpenFullChat = async () => {
+    await createConversation(lesson.title);
     navigate("/chat");
   };
 

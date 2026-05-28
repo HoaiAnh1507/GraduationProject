@@ -24,9 +24,11 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Service
@@ -97,11 +99,12 @@ public class DocumentsService {
         }
 
         List<HttpRange> ranges = requestHeaders.getRange();
+        String contentDisposition = contentDispositionHeader(row.sourceFile());
         if (ranges == null || ranges.isEmpty()) {
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFilename(row.sourceFile()) + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
                     .contentLength(contentLength)
                     .body(resource);
         }
@@ -115,7 +118,7 @@ public class DocumentsService {
         return ResponseEntity.status(206)
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFilename(row.sourceFile()) + "\"")
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
                 .contentLength(rangeLength)
                 .body(region);
     }
@@ -201,5 +204,16 @@ public class DocumentsService {
         } catch (Exception e) {
             return "document.pdf";
         }
+    }
+
+    private String contentDispositionHeader(String sourceFile) {
+        String original = safeFilename(sourceFile);
+        String asciiFallback = original.replaceAll("[^\\x20-\\x7E]", "_");
+        if (asciiFallback.isBlank()) {
+            asciiFallback = "document.pdf";
+        }
+        String encoded = URLEncoder.encode(original, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return "inline; filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
     }
 }

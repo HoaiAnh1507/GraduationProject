@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from "react-router";
 import {
   Plus, MessageSquare, Clock, ChevronLeft, ChevronRight,
   BookOpen, Home, GraduationCap, Sun, Moon,
-  User, Settings, LogOut, ChevronUp, Globe, Library,
+  User, Settings, LogOut, ChevronUp, Globe, Library, PencilLine, Trash2,
 } from "lucide-react";
-import { Conversation } from "../types";
 import { motion, AnimatePresence } from "motion/react";
-import { useApp, newConvId } from "../context/AppContext";
+import type { Conversation } from "../types";
+import { useApp } from "../context/AppContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -32,10 +32,19 @@ export function Sidebar(_props: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { conversations, setConversations, activeConversationId, setActiveConversationId } = useApp();
+  const {
+    conversations,
+    activeConversationId,
+    setActiveConversationId,
+    createConversation,
+    updateConversationTitle,
+    deleteConversation,
+  } = useApp();
   const { isDark, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
 
@@ -60,22 +69,33 @@ export function Sidebar(_props: SidebarProps) {
     { id: "flashcards", icon: GraduationCap, label: "Flashcards", path: "/flashcards" },
   ];
 
-  const handleNew = () => {
-    const newConv: Conversation = {
-      id: newConvId(),
-      title: "Hội thoại mới",
-      lastMessage: "",
-      timestamp: new Date(),
-      messages: [],
-    };
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveConversationId(newConv.id);
+  const handleNew = async () => {
+    const id = await createConversation("Hội thoại mới");
+    setActiveConversationId(id);
     navigate("/chat");
   };
 
   const handleSelectConversation = (id: string) => {
     setActiveConversationId(id);
     navigate("/chat");
+  };
+
+  const handleRenameConversation = (id: string, currentTitle: string) => {
+    setEditingConvId(id);
+    setEditingTitle(currentTitle);
+  };
+
+  const commitRename = async (id: string, currentTitle: string) => {
+    const next = editingTitle.trim();
+    setEditingConvId(null);
+    if (!next || next === currentTitle) return;
+    await updateConversationTitle(id, next);
+  };
+
+  const handleDeleteConversation = async (id: string) => {
+    const ok = window.confirm("Xóa hội thoại này?");
+    if (!ok) return;
+    await deleteConversation(id);
   };
 
   const handleLogout = () => {
@@ -219,34 +239,84 @@ export function Sidebar(_props: SidebarProps) {
             {conversations.map((conv) => {
               const isActive = activeConversationId === conv.id && location.pathname === "/chat";
               return (
-                <button
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv.id)}
-                  className="w-full text-left rounded-lg px-3 py-2.5 transition-all group"
-                  style={{
-                    background: isActive ? "var(--t-gold-bg)" : "transparent",
-                    border: isActive ? "1px solid var(--t-gold-border)" : "1px solid transparent",
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <MessageSquare
-                      size={14}
-                      className="flex-shrink-0 mt-0.5"
-                      style={{ color: isActive ? "var(--t-gold)" : "var(--t-text-4)" }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="text-sm truncate"
-                        style={{ color: isActive ? "var(--t-gold-text)" : "var(--t-text-1)" }}
-                      >
-                        {conv.title}
-                      </p>
-                      <p className="text-xs truncate mt-0.5" style={{ color: "var(--t-text-4)" }}>
-                        {formatTime(conv.timestamp)}
-                      </p>
+                <div key={conv.id} className="relative group">
+                  <button
+                    onClick={() => {
+                      if (editingConvId === conv.id) return;
+                      handleSelectConversation(conv.id);
+                    }}
+                    className="w-full text-left rounded-lg px-3 py-2.5 transition-all group"
+                    style={{
+                      background: isActive ? "var(--t-gold-bg)" : "transparent",
+                      border: isActive ? "1px solid var(--t-gold-border)" : "1px solid transparent",
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <MessageSquare
+                        size={14}
+                        className="flex-shrink-0 mt-0.5"
+                        style={{ color: isActive ? "var(--t-gold)" : "var(--t-text-4)" }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        {editingConvId === conv.id ? (
+                          <input
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => commitRename(conv.id, conv.title)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRename(conv.id, conv.title);
+                              if (e.key === "Escape") setEditingConvId(null);
+                            }}
+                            autoFocus
+                            className="text-sm w-full rounded-md px-2 py-1"
+                            style={{
+                              background: "var(--t-card-bg)",
+                              color: "var(--t-text-1)",
+                              border: "1px solid var(--t-divider)",
+                              outline: "none",
+                            }}
+                          />
+                        ) : (
+                          <p
+                            className="text-sm truncate"
+                            style={{ color: isActive ? "var(--t-gold-text)" : "var(--t-text-1)" }}
+                          >
+                            {conv.title}
+                          </p>
+                        )}
+                        <p className="text-xs truncate mt-0.5" style={{ color: "var(--t-text-4)" }}>
+                          {formatTime(conv.timestamp)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRenameConversation(conv.id, conv.title);
+                          }}
+                          className="p-1.5 rounded-md transition-all"
+                          style={{ color: "var(--t-text-3)", background: "var(--t-card-bg)" }}
+                          title="Đổi tên"
+                        >
+                          <PencilLine size={13} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteConversation(conv.id);
+                          }}
+                          className="p-1.5 rounded-md transition-all"
+                          style={{ color: "#c15050", background: "var(--t-card-bg)" }}
+                          title="Xóa"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </motion.div>

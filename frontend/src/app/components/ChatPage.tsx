@@ -12,6 +12,7 @@ import { backendApi } from "../api/backendApi";
 interface ChatPageProps {
   conversation: Conversation | null;
   onUpdateConversation: (conv: Conversation) => void;
+  onCreateConversation: () => void;
 }
 
 let msgIdCounter = 1000;
@@ -27,9 +28,18 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
         backdropFilter: "blur(12px)",
       }}
     >
-      <div className="flex items-center gap-3">
-        <div>
-          <h2 className="text-sm" style={{ color: "var(--t-text-1)" }}>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="min-w-0">
+          <h2
+            className="text-sm"
+            style={{
+              color: "var(--t-text-1)",
+              whiteSpace: "normal",
+              overflow: "visible",
+              textOverflow: "clip",
+              wordBreak: "break-word",
+            }}
+          >
             {title || "Hội thoại mới"}
           </h2>
           <div className="flex items-center gap-2">
@@ -77,7 +87,7 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
   );
 }
 
-export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) {
+export function ChatPage({ conversation, onUpdateConversation, onCreateConversation }: ChatPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [openPDFCitation, setOpenPDFCitation] = useState<Citation | null>(null);
   const [documentCount, setDocumentCount] = useState<number | undefined>(undefined);
@@ -117,7 +127,27 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
   }, []);
 
   const handleSend = async (text: string) => {
-    if (!conversation) return;
+    if (!conversation) {
+      return (
+        <div className="flex flex-col h-full">
+          <TopBar title="" documentCount={documentCount} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm" style={{ color: "var(--t-text-3)" }}>
+                Chưa có hội thoại nào. Tạo hội thoại mới để bắt đầu.
+              </p>
+              <button
+                onClick={onCreateConversation}
+                className="mt-4 px-4 py-2 rounded-lg text-sm"
+                style={{ background: "linear-gradient(135deg, #c9a84c, #a87c2a)", color: "white" }}
+              >
+                Tạo hội thoại
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     const userMsg: Message = {
       id: newId(),
@@ -142,7 +172,11 @@ export function ChatPage({ conversation, onUpdateConversation }: ChatPageProps) 
     setIsLoading(true);
 
     try {
-      const resp = await backendApi.askChat(text);
+      const conversationId = Number(conversation.id);
+      if (Number.isNaN(conversationId)) {
+        throw new Error("Invalid conversation id");
+      }
+      const resp = await backendApi.askChat(text, conversationId);
 
       const citations: Citation[] = (resp.citations ?? []).map((c, i) => {
         const fileName = backendApi.basename(c.sourceFile);
