@@ -73,6 +73,11 @@ export interface ConversationMessage {
   citations?: BackendCitationDto[];
 }
 
+export interface ChatTurnPayload {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
 function basename(p: string): string {
   if (!p) return p;
   const parts = p.split(/[/\\]/g);
@@ -116,11 +121,11 @@ export const backendApi = {
     return httpJson<DocumentDetail>(`/api/documents/${documentId}`);
   },
 
-  askChat(query: string, conversationId: number, topK?: number): Promise<ChatAskResponse> {
+  askChat(query: string, conversationId?: number | null, topK?: number, history?: ChatTurnPayload[]): Promise<ChatAskResponse> {
     return httpJson<ChatAskResponse>("/api/chat/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, topK, conversationId }),
+      body: JSON.stringify({ query, topK, conversationId, history }),
     });
   },
 
@@ -165,6 +170,14 @@ export const backendApi = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  importGuestConversation(payload: { title?: string | null; history: ChatTurnPayload[] }): Promise<ConversationDetail> {
+    return httpJson<ConversationDetail>("/api/conversations/import-guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
   },
 

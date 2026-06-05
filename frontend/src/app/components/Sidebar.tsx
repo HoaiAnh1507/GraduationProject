@@ -48,7 +48,7 @@ export function Sidebar(_props: SidebarProps) {
   const { isDark, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
 
-  const isHome = location.pathname === "/";
+  const isHome = location.pathname === "/" || location.pathname.startsWith("/chat");
   const isStudyMaterials = location.pathname.startsWith("/study-materials") || location.pathname.startsWith("/lesson");
   const isFlashcards = location.pathname.startsWith("/flashcards") || location.pathname.startsWith("/study/");
 
@@ -101,7 +101,7 @@ export function Sidebar(_props: SidebarProps) {
   const handleLogout = () => {
     setMenuOpen(false);
     logout();
-    navigate("/login");
+    navigate("/");
   };
 
   return (
@@ -334,7 +334,7 @@ export function Sidebar(_props: SidebarProps) {
       >
         {/* User menu popup */}
         <AnimatePresence>
-          {menuOpen && (
+          {menuOpen && user && (
             <motion.div
               initial={{ opacity: 0, y: 8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -411,9 +411,9 @@ export function Sidebar(_props: SidebarProps) {
 
         {/* Profile button */}
         <button
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => (user ? setMenuOpen(!menuOpen) : navigate("/login"))}
           className="w-full flex items-center gap-2.5 p-3.5 transition-all hover:opacity-80"
-          title={collapsed ? user?.name : undefined}
+          title={collapsed ? (user?.name ?? "Dang nhap") : undefined}
         >
           {/* Avatar */}
           <div
@@ -423,14 +423,14 @@ export function Sidebar(_props: SidebarProps) {
               color: "white",
             }}
           >
-            {user?.initials ?? "??"}
+            {user?.initials ?? "G"}
           </div>
 
           {!collapsed && (
             <>
               <div className="min-w-0 flex-1 text-left">
                 <p className="text-sm truncate" style={{ color: "var(--t-text-1)" }}>
-                  {user?.name}
+                  {user?.name ?? "Guest"}
                 </p>
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400" />

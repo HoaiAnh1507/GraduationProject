@@ -1,9 +1,9 @@
-import { Outlet, Navigate } from "react-router";
+import { Outlet } from "react-router";
 import { Sidebar } from "./Sidebar";
 import { useAuth } from "../context/AuthContext";
 
 export function Root() {
-  const { user, isLoading } = useAuth();
+  const { isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,10 +17,6 @@ export function Root() {
         />
       </div>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
   }
 
   return (

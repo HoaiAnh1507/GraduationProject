@@ -1,8 +1,13 @@
 package vn.history.backend.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,11 +24,13 @@ import vn.history.backend.repository.AnswerCitationsRepository;
 import vn.history.backend.repository.ChatMessagesRepository;
 import vn.history.backend.repository.ConversationsRepository;
 import vn.history.backend.repository.UsersRepository;
+import vn.history.backend.service.GuestRateLimiter;
 import vn.history.backend.service.RagService;
 import vn.history.backend.service.auth.JwtService;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -36,8 +43,12 @@ public class ChatController {
     private final ConversationsRepository conversationsRepository;
     private final ChatMessagesRepository chatMessagesRepository;
     private final AnswerCitationsRepository answerCitationsRepository;
+    private final GuestRateLimiter guestRateLimiter;
+    private final boolean cookieSecure;
+    private final String cookieSameSite;
 
     private static final String ACCESS_COOKIE = "access_token";
+    private static final String GUEST_COOKIE = "guest_session";
 
     public ChatController(
         RagService ragService,
@@ -46,7 +57,10 @@ public class ChatController {
         UsersRepository usersRepository,
         ConversationsRepository conversationsRepository,
         ChatMessagesRepository chatMessagesRepository,
-        AnswerCitationsRepository answerCitationsRepository
+        AnswerCitationsRepository answerCitationsRepository,
+        GuestRateLimiter guestRateLimiter,
+        @Value("${app.auth.cookie-secure:false}") boolean cookieSecure,
+        @Value("${app.auth.cookie-same-site:Lax}") String cookieSameSite
     ) {
         this.ragService = ragService;
         this.taskExecutor = taskExecutor;
@@ -55,13 +69,23 @@ public class ChatController {
     this.conversationsRepository = conversationsRepository;
     this.chatMessagesRepository = chatMessagesRepository;
     this.answerCitationsRepository = answerCitationsRepository;
+    this.guestRateLimiter = guestRateLimiter;
+    this.cookieSecure = cookieSecure;
+    this.cookieSameSite = cookieSameSite;
     }
 
     @PostMapping("/ask")
     public ChatAskResponse ask(
         @Valid @RequestBody ChatAskRequest req,
-        @CookieValue(value = ACCESS_COOKIE, required = false) String accessToken
+        @CookieValue(value = ACCESS_COOKIE, required = false) String accessToken,
+        @CookieValue(value = GUEST_COOKIE, required = false) String guestSession,
+        HttpServletRequest httpReq,
+        HttpServletResponse httpResp
     ) {
+    if (req.conversationId() == null) {
+        return askAsGuest(req, guestSession, httpReq, httpResp);
+    }
+
     long userId = requireUserId(accessToken);
     long conversationId = req.conversationId();
 
@@ -125,6 +149,22 @@ public class ChatController {
     }
     }
 
+    private ChatAskResponse askAsGuest(
+            ChatAskRequest req,
+            String guestSession,
+            HttpServletRequest httpReq,
+            HttpServletResponse httpResp
+    ) {
+        String sessionId = guestSession;
+        if (sessionId == null || sessionId.isBlank()) {
+            sessionId = UUID.randomUUID().toString();
+            httpResp.addHeader(HttpHeaders.SET_COOKIE, guestCookie(sessionId));
+        }
+
+        guestRateLimiter.check(clientIp(httpReq), sessionId);
+        return ragService.ask(req);
+    }
+
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(
             @RequestParam("query") String query,
@@ -180,5 +220,28 @@ public class ChatController {
         } catch (IllegalStateException e) {
             throw new UnauthorizedException("Invalid access token");
         }
+    }
+
+    private String guestCookie(String sessionId) {
+        return ResponseCookie.from(GUEST_COOKIE, sessionId)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api/chat")
+                .sameSite(cookieSameSite)
+                .build()
+                .toString();
+    }
+
+    private String clientIp(HttpServletRequest req) {
+        String forwardedFor = req.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            int comma = forwardedFor.indexOf(',');
+            return comma >= 0 ? forwardedFor.substring(0, comma).trim() : forwardedFor.trim();
+        }
+        String realIp = req.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return req.getRemoteAddr();
     }
 }

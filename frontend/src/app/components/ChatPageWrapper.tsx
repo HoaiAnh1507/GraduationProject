@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { ChatPage } from "./ChatPage";
+import type { Conversation } from "../types";
 
 export function ChatPageWrapper() {
   const {
@@ -12,8 +13,8 @@ export function ChatPageWrapper() {
     updateConversationTitle,
     loadConversationMessages,
   } = useApp();
+  const loadedConversationIds = useRef<Set<string>>(new Set());
 
-  // Auto-select first conversation if none is active
   useEffect(() => {
     if (!activeConversationId && conversations.length > 0) {
       setActiveConversationId(conversations[0].id);
@@ -22,19 +23,23 @@ export function ChatPageWrapper() {
 
   useEffect(() => {
     if (!activeConversationId) return;
+    if (activeConversationId.startsWith("guest_")) return;
+    if (loadedConversationIds.current.has(activeConversationId)) return;
+
     const conv = conversations.find((c) => c.id === activeConversationId);
     if (!conv || conv.messages.length > 0) return;
 
+    loadedConversationIds.current.add(activeConversationId);
     let cancelled = false;
     loadConversationMessages(activeConversationId)
       .then((msgs) => {
         if (cancelled) return;
-        setConversations((prev) => prev.map((c) =>
-          c.id === activeConversationId ? { ...c, messages: msgs } : c
-        ));
+        setConversations((prev) =>
+          prev.map((c) => (c.id === activeConversationId ? { ...c, messages: msgs } : c))
+        );
       })
       .catch(() => {
-        // keep empty state
+        // Keep empty state.
       });
 
     return () => {
@@ -55,8 +60,8 @@ export function ChatPageWrapper() {
     }
   };
 
-  const handleCreate = async () => {
-    await createConversation("Hội thoại mới");
+  const handleCreate = async (title?: string) => {
+    return createConversation(title || "Hoi thoai moi");
   };
 
   return (

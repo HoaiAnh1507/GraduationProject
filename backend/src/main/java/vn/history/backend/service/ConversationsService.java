@@ -6,6 +6,7 @@ import vn.history.backend.dto.conversations.ConversationDetailDto;
 import vn.history.backend.dto.conversations.ConversationMessageDto;
 import vn.history.backend.dto.conversations.ConversationSummaryDto;
 import vn.history.backend.dto.conversations.ConversationUpdateRequest;
+import vn.history.backend.dto.conversations.ImportGuestConversationRequest;
 import vn.history.backend.exception.NotFoundException;
 import vn.history.backend.repository.AnswerCitationsRepository;
 import vn.history.backend.repository.ChatMessagesRepository;
@@ -45,6 +46,43 @@ public class ConversationsService {
         return conversationsRepository.findById(userId, id)
                 .map(r -> new ConversationDetailDto(r.id(), r.title(), r.createdAt(), r.updatedAt()))
                 .orElseThrow(() -> new IllegalStateException("Conversation not found after insert"));
+    }
+
+    public ConversationDetailDto importGuest(long userId, ImportGuestConversationRequest req) {
+        if (req.history() == null || req.history().isEmpty()) {
+            throw new IllegalArgumentException("Guest history is empty");
+        }
+
+        String title = req.title();
+        if (title == null || title.isBlank()) {
+            title = req.history().stream()
+                    .filter(t -> "user".equals(t.role()))
+                    .map(t -> t.content() == null ? "" : t.content().trim())
+                    .filter(s -> !s.isBlank())
+                    .findFirst()
+                    .orElse("Guest conversation");
+        }
+        if (title.length() > 80) {
+            title = title.substring(0, 80).trim();
+        }
+
+        long conversationId = conversationsRepository.insert(userId, title);
+        req.history().stream()
+                .filter(t -> "user".equals(t.role()) || "assistant".equals(t.role()) || "system".equals(t.role()))
+                .filter(t -> t.content() != null && !t.content().isBlank())
+                .forEach(t -> chatMessagesRepository.insertMessage(
+                        conversationId,
+                        t.role(),
+                        t.content(),
+                        null,
+                        null,
+                        null,
+                        null
+                ));
+
+        return conversationsRepository.findById(userId, conversationId)
+                .map(r -> new ConversationDetailDto(r.id(), r.title(), r.createdAt(), r.updatedAt()))
+                .orElseThrow(() -> new IllegalStateException("Conversation not found after import"));
     }
 
     public List<ConversationSummaryDto> list(long userId) {

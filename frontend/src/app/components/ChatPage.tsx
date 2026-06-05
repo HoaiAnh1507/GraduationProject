@@ -1,18 +1,18 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, Settings, Database, Zap, Info } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Database, Info, Search, Settings, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { Message, Conversation, Citation } from "../types";
+import { backendApi } from "../api/backendApi";
 import { MessageBubble } from "./MessageBubble";
 import { MessageLoadingSkeleton } from "./LoadingSkeleton";
 import { EmptyState } from "./EmptyState";
 import { ChatInput } from "./ChatInput";
 import { PDFViewerModal } from "./PDFViewerModal";
-import { motion, AnimatePresence } from "motion/react";
-import { backendApi } from "../api/backendApi";
 
 interface ChatPageProps {
   conversation: Conversation | null;
   onUpdateConversation: (conv: Conversation) => void;
-  onCreateConversation: () => void;
+  onCreateConversation: (title?: string) => Promise<string>;
 }
 
 let msgIdCounter = 1000;
@@ -40,7 +40,7 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
               wordBreak: "break-word",
             }}
           >
-            {title || "Hội thoại mới"}
+            {title || "Hoi thoai moi"}
           </h2>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
@@ -63,14 +63,14 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
         >
           <Database size={11} style={{ color: "#6399ff" }} />
           <span className="text-xs" style={{ color: "rgba(99,153,255,0.8)" }}>
-            {documentCount ?? 0} tài liệu
+            {documentCount ?? 0} tai lieu
           </span>
         </div>
 
         <button
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
           style={{ color: "var(--t-text-3)", border: "1px solid var(--t-btn-border)" }}
-          title="Thông tin hệ thống"
+          title="Thong tin he thong"
         >
           <Info size={14} />
         </button>
@@ -78,7 +78,7 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
         <button
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
           style={{ color: "var(--t-text-3)", border: "1px solid var(--t-btn-border)" }}
-          title="Cài đặt"
+          title="Cai dat"
         >
           <Settings size={14} />
         </button>
@@ -96,12 +96,8 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
 
   const messages = conversation?.messages ?? [];
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -118,8 +114,7 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
         setDocumentsByBaseName(map);
       })
       .catch(() => {
-        if (cancelled) return;
-        setDocumentCount(undefined);
+        if (!cancelled) setDocumentCount(undefined);
       });
     return () => {
       cancelled = true;
@@ -127,26 +122,18 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
   }, []);
 
   const handleSend = async (text: string) => {
-    if (!conversation) {
-      return (
-        <div className="flex flex-col h-full">
-          <TopBar title="" documentCount={documentCount} />
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-sm" style={{ color: "var(--t-text-3)" }}>
-                Chưa có hội thoại nào. Tạo hội thoại mới để bắt đầu.
-              </p>
-              <button
-                onClick={onCreateConversation}
-                className="mt-4 px-4 py-2 rounded-lg text-sm"
-                style={{ background: "linear-gradient(135deg, #c9a84c, #a87c2a)", color: "white" }}
-              >
-                Tạo hội thoại
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+    const fallbackTitle = text.slice(0, 40) + (text.length > 40 ? "..." : "");
+    let currentConversation = conversation;
+
+    if (!currentConversation) {
+      const id = await onCreateConversation(fallbackTitle);
+      currentConversation = {
+        id,
+        title: fallbackTitle,
+        lastMessage: "",
+        timestamp: new Date(),
+        messages: [],
+      };
     }
 
     const userMsg: Message = {
@@ -158,25 +145,21 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
     };
 
     const updatedWithUser: Conversation = {
-      ...conversation,
-      title:
-        conversation.messages.length === 0
-          ? text.slice(0, 40) + (text.length > 40 ? "..." : "")
-          : conversation.title,
+      ...currentConversation,
+      title: currentConversation.messages.length === 0 ? fallbackTitle : currentConversation.title,
       lastMessage: text,
       timestamp: new Date(),
-      messages: [...conversation.messages, userMsg],
+      messages: [...currentConversation.messages, userMsg],
     };
 
     onUpdateConversation(updatedWithUser);
     setIsLoading(true);
 
     try {
-      const conversationId = Number(conversation.id);
-      if (Number.isNaN(conversationId)) {
-        throw new Error("Invalid conversation id");
-      }
-      const resp = await backendApi.askChat(text, conversationId);
+      const numericConversationId = Number(currentConversation.id);
+      const conversationId = Number.isNaN(numericConversationId) ? null : numericConversationId;
+      const history = updatedWithUser.messages.map((m) => ({ role: m.role, content: m.content }));
+      const resp = await backendApi.askChat(text, conversationId, undefined, history);
 
       const citations: Citation[] = (resp.citations ?? []).map((c, i) => {
         const fileName = backendApi.basename(c.sourceFile);
@@ -211,8 +194,7 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
       const assistantMsg: Message = {
         id: newId(),
         role: "assistant",
-        content:
-          "Không thể gọi backend (/api/chat/ask). Hãy kiểm tra backend đang chạy và Vite proxy đang trỏ đúng cổng.",
+        content: "Khong the goi backend (/api/chat/ask). Hay kiem tra backend dang chay va Vite proxy dung cong.",
         timestamp: new Date(),
         isError: true,
         hasCitations: false,
@@ -245,18 +227,13 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
   };
 
   const handleExploreRelated = (topic: string) => {
-    handleSend(`Hãy cho tôi biết thêm về: ${topic}`);
-  };
-
-  const handleSelectQuestion = (q: string) => {
-    handleSend(q);
+    handleSend(`Hay cho toi biet them ve: ${topic}`);
   };
 
   return (
     <div className="flex flex-col h-full">
       <TopBar title={conversation?.title ?? ""} documentCount={documentCount} />
 
-      {/* Messages area */}
       <div
         className="flex-1 overflow-y-auto"
         style={{
@@ -273,7 +250,7 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
               exit={{ opacity: 0 }}
               className="h-full"
             >
-              <EmptyState onSelectQuestion={handleSelectQuestion} />
+              <EmptyState onSelectQuestion={handleSend} />
             </motion.div>
           ) : (
             <motion.div key="messages" className="py-4">
@@ -301,10 +278,9 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
       <ChatInput
         onSend={handleSend}
         disabled={isLoading}
-        placeholder={isLoading ? "Đang xử lý câu hỏi..." : "Đặt câu hỏi về lịch sử Việt Nam..."}
+        placeholder={isLoading ? "Dang xu ly cau hoi..." : "Dat cau hoi ve lich su Viet Nam..."}
       />
 
-      {/* PDF Viewer Modal */}
       <AnimatePresence>
         {openPDFCitation && (
           <PDFViewerModal

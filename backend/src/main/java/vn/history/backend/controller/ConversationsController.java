@@ -16,6 +16,7 @@ import vn.history.backend.dto.conversations.ConversationDetailDto;
 import vn.history.backend.dto.conversations.ConversationMessageDto;
 import vn.history.backend.dto.conversations.ConversationSummaryDto;
 import vn.history.backend.dto.conversations.ConversationUpdateRequest;
+import vn.history.backend.dto.conversations.ImportGuestConversationRequest;
 import vn.history.backend.exception.UnauthorizedException;
 import vn.history.backend.repository.UsersRepository;
 import vn.history.backend.service.ConversationsService;
@@ -51,6 +52,15 @@ public class ConversationsController {
     ) {
         long userId = requireUserId(accessToken);
         return conversationsService.create(userId, req);
+    }
+
+    @PostMapping("/import-guest")
+    public ConversationDetailDto importGuest(
+            @Valid @RequestBody ImportGuestConversationRequest req,
+            @CookieValue(value = ACCESS_COOKIE, required = false) String accessToken
+    ) {
+        long userId = requireUserId(accessToken);
+        return conversationsService.importGuest(userId, req);
     }
 
     @GetMapping

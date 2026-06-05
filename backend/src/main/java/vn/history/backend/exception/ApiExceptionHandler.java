@@ -32,6 +32,11 @@ public class ApiExceptionHandler {
         return error(HttpStatus.CONFLICT, e.getMessage());
     }
 
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<Map<String, Object>> rateLimited(RateLimitException e) {
+        return error(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> badRequest(IllegalArgumentException e) {
         return error(HttpStatus.BAD_REQUEST, e.getMessage());
