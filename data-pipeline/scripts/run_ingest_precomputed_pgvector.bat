@@ -11,6 +11,7 @@ cd /d "%~dp0"
 set EXPORT_DIR=..\data\processed\embedding_exports
 set EMBEDDINGS_FILE=%EXPORT_DIR%\embeddings.npy
 set RECORDS_FILE=%EXPORT_DIR%\records.jsonl
+set RAW_DIR=..\data\raw
 
 set DB_HOST=%~1
 set DB_PORT=%~2
@@ -49,7 +50,7 @@ if not exist "%RECORDS_FILE%" (
 
 echo.
 echo [2] Ingest vao PGVector...
-python ingest_precomputed_embeddings_to_pgvector.py --embeddings "%EMBEDDINGS_FILE%" --records "%RECORDS_FILE%" --db-host "%DB_HOST%" --db-port %DB_PORT% --db-name "%DB_NAME%" --db-user "%DB_USER%" --db-password "%DB_PASSWORD%" --table "%TABLE_NAME%" --distance "%DISTANCE%" --batch-size %BATCH_SIZE%
+python ingest_precomputed_embeddings_to_pgvector.py --embeddings "%EMBEDDINGS_FILE%" --records "%RECORDS_FILE%" --raw-dir "%RAW_DIR%" --db-host "%DB_HOST%" --db-port %DB_PORT% --db-name "%DB_NAME%" --db-user "%DB_USER%" --db-password "%DB_PASSWORD%" --table "%TABLE_NAME%" --distance "%DISTANCE%" --batch-size %BATCH_SIZE%
 if errorlevel 1 (
   echo ❌ Loi ingest precomputed embeddings.
   exit /b 1

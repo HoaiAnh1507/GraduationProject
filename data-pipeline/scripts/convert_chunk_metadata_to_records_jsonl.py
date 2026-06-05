@@ -24,6 +24,8 @@ import os
 
 import pandas as pd
 
+from document_file_metadata import normalize_page_spans
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert chunk_metadata.parquet -> records.jsonl")
@@ -93,6 +95,11 @@ def main() -> None:
                         page_spans_obj = []
                 else:
                     page_spans_obj = v
+            page_spans_obj = normalize_page_spans(
+                page_spans_obj,
+                int(row["page_start"]),
+                int(row["page_end"]),
+            )
 
             rec = {
                 "source_file_name": str(row["source_file_name"]),

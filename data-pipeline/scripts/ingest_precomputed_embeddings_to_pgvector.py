@@ -16,10 +16,17 @@ It will:
 import argparse
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import psycopg
+
+from document_file_metadata import (
+    build_document_file_metadata,
+    build_raw_file_index,
+    normalize_page_spans,
+)
 
 
 def vector_to_literal(vec: np.ndarray) -> str:
@@ -88,7 +95,7 @@ def normalize_record(r: Dict[str, Any]) -> Tuple[str, int, int, int, Optional[in
     word_count_val = r.get("word_count")
     word_count = int(word_count_val) if word_count_val is not None else (len(content.split()) if content else 0)
 
-    page_spans_json = ensure_json_str(r.get("page_spans_json", []))
+    page_spans_json = ensure_json_str(normalize_page_spans(r.get("page_spans_json", []), page_start, page_end))
 
     metadata_obj = r.get("metadata")
     if metadata_obj is None:
@@ -126,7 +133,20 @@ def main() -> None:
     parser.add_argument("--db-password", default="admin", help="PostgreSQL password")
 
     parser.add_argument("--batch-size", type=int, default=256, help="DB upsert batch size")
+    parser.add_argument("--table", default="rag_chunks", help="Compatibility option; schema uses rag_chunks")
+    parser.add_argument("--distance", default="cosine", help="Compatibility option; pgvector index is defined by schema")
+    parser.add_argument(
+        "--raw-dir",
+        default=os.path.join("..", "data", "raw"),
+        help="Directory containing original raw source files for checksum/page metadata",
+    )
     args = parser.parse_args()
+
+    script_dir = Path(__file__).resolve().parent
+    raw_dir = Path(args.raw_dir)
+    if not raw_dir.is_absolute():
+        raw_dir = (script_dir / raw_dir).resolve()
+    raw_index = build_raw_file_index(raw_dir)
 
     embeddings = np.load(args.embeddings)
     records = load_jsonl(args.records)
@@ -154,10 +174,14 @@ def main() -> None:
         ensure_schema(conn)
 
         doc_upsert_sql = (
-            "INSERT INTO documents (source_file, title)\n"
-            "VALUES (%s, %s)\n"
+            "INSERT INTO documents (source_file, title, total_pages, checksum_sha256, metadata)\n"
+            "VALUES (%s, %s, %s, %s, %s::jsonb)\n"
             "ON CONFLICT (source_file) DO UPDATE\n"
-            "SET updated_at = NOW()\n"
+            "SET title = COALESCE(documents.title, EXCLUDED.title),\n"
+            "    total_pages = COALESCE(documents.total_pages, EXCLUDED.total_pages),\n"
+            "    checksum_sha256 = COALESCE(documents.checksum_sha256, EXCLUDED.checksum_sha256),\n"
+            "    metadata = documents.metadata || EXCLUDED.metadata,\n"
+            "    updated_at = NOW()\n"
             "RETURNING id;"
         )
 
@@ -198,7 +222,28 @@ def main() -> None:
                     doc_id = doc_cache.get(source_file_name)
                     if doc_id is None:
                         title = derive_title_from_source(source_file_name)
-                        cur.execute(doc_upsert_sql, (source_file_name, title))
+                        file_metadata = build_document_file_metadata(source_file_name, raw_dir, raw_index)
+                        if file_metadata is None:
+                            total_pages = None
+                            checksum_sha256 = None
+                            doc_metadata_json = ensure_json_str(
+                                {
+                                    "source_file_name": source_file_name,
+                                    "raw_file_match": {
+                                        "matched_by": None,
+                                        "raw_dir": str(raw_dir),
+                                        "error": "raw_file_not_found",
+                                    },
+                                }
+                            )
+                        else:
+                            total_pages = file_metadata["total_pages"]
+                            checksum_sha256 = file_metadata["checksum_sha256"]
+                            doc_metadata_json = ensure_json_str(file_metadata["metadata"])
+                        cur.execute(
+                            doc_upsert_sql,
+                            (source_file_name, title, total_pages, checksum_sha256, doc_metadata_json),
+                        )
                         doc_id = int(cur.fetchone()[0])
                         doc_cache[source_file_name] = doc_id
 
@@ -225,6 +270,7 @@ def main() -> None:
 
     print(f"Embeddings file: {args.embeddings}")
     print(f"Records file: {args.records}")
+    print(f"Raw dir: {raw_dir}")
     print(f"DB: {args.db_host}:{args.db_port}/{args.db_name}")
     print(f"Embedding dim: {dim}")
     print(f"Upserted rag_chunks: {upserted}")
