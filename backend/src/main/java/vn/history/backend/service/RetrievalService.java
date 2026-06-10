@@ -2,6 +2,8 @@ package vn.history.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import vn.history.backend.dto.retrieval.RetrievedChunkDto;
 import vn.history.backend.dto.retrieval.RetrievalSearchResponse;
 import vn.history.backend.repository.RagChunksRepository;
@@ -17,13 +19,16 @@ import java.util.Map;
 public class RetrievalService {
 
     private final RagChunksRepository ragChunksRepository;
+    private final ObjectMapper objectMapper;
     private final int embeddingDim;
 
     public RetrievalService(
             RagChunksRepository ragChunksRepository,
+            ObjectMapper objectMapper,
             @Value("${spring.ai.vectorstore.pgvector.dimensions:1024}") int embeddingDim
     ) {
         this.ragChunksRepository = ragChunksRepository;
+        this.objectMapper = objectMapper;
         this.embeddingDim = embeddingDim;
     }
 
@@ -74,7 +79,8 @@ public class RetrievalService {
                     r.wordCount(),
                     r.content(),
                     r.score(),
-                    "keyword"
+                    "keyword",
+                    parseArrayJson(r.pageSpansJson())
             ));
         }
         return out;
@@ -97,7 +103,8 @@ public class RetrievalService {
                     r.wordCount(),
                     r.content(),
                     score,
-                    "vector"
+                    "vector",
+                    parseArrayJson(r.pageSpansJson())
             ));
         }
         return out;
@@ -160,9 +167,22 @@ public class RetrievalService {
                             r.wordCount(),
                             r.content(),
                             e.getValue(),
-                            matchedBy
+                            matchedBy,
+                            parseArrayJson(r.pageSpansJson())
                     );
                 })
                 .toList();
+    }
+
+    private JsonNode parseArrayJson(Object pgJson) {
+        if (pgJson == null) {
+            return objectMapper.createArrayNode();
+        }
+        try {
+            JsonNode node = objectMapper.readTree(pgJson.toString());
+            return node.isArray() ? node : objectMapper.createArrayNode();
+        } catch (Exception e) {
+            return objectMapper.createArrayNode();
+        }
     }
 }

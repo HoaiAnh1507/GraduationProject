@@ -174,6 +174,7 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
           title: c.title,
           pageStart: c.pageStart,
           pageEnd: c.pageEnd,
+          pageSpans: c.pageSpans ?? [],
         };
       });
 

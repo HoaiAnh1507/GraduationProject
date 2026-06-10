@@ -30,6 +30,7 @@ public class RagChunksRepository {
                   rc.page_end,
                   rc.word_count,
                   rc.content,
+                  rc.page_spans_json,
                   ts_rank_cd(rc.chunk_tsv, q) AS score
                 FROM rag_chunks rc
                 JOIN documents d ON d.id = rc.document_id
@@ -51,6 +52,7 @@ public class RagChunksRepository {
                         rs.getInt("page_end"),
                         (Integer) rs.getObject("word_count"),
                         rs.getString("content"),
+                        rs.getObject("page_spans_json"),
                         rs.getDouble("score")
                 ),
                 query,
@@ -70,6 +72,7 @@ public class RagChunksRepository {
                   rc.page_end,
                   rc.word_count,
                   rc.content,
+                  rc.page_spans_json,
                   (rc.embedding <=> (?::vector)) AS distance
                 FROM rag_chunks rc
                 JOIN documents d ON d.id = rc.document_id
@@ -89,6 +92,7 @@ public class RagChunksRepository {
                         rs.getInt("page_end"),
                         (Integer) rs.getObject("word_count"),
                         rs.getString("content"),
+                        rs.getObject("page_spans_json"),
                         // store distance in score field for now; service will normalize
                         rs.getDouble("distance")
                 ),
@@ -154,6 +158,7 @@ public class RagChunksRepository {
             int pageEnd,
             Integer wordCount,
             String content,
+            Object pageSpansJson,
             double score
     ) {
     }

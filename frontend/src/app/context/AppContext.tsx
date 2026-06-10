@@ -238,6 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         title: c.title ?? undefined,
         pageStart: c.pageStart,
         pageEnd: c.pageEnd,
+        pageSpans: c.pageSpans ?? [],
       })),
     }));
   };

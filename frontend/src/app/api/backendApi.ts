@@ -13,6 +13,19 @@ export interface DocumentDetail extends DocumentSummary {
   updatedAt: string;
 }
 
+export interface BBoxSpanDto {
+  x0: number;
+  top: number;
+  x1: number;
+  bottom: number;
+}
+
+export interface PageSpanDto {
+  page_number: number;
+  bbox_span: BBoxSpanDto;
+  token_count?: number;
+}
+
 export interface BackendCitationDto {
   chunkId: number;
   documentId: number;
@@ -22,6 +35,7 @@ export interface BackendCitationDto {
   pageStart: number;
   pageEnd: number;
   quote: string | null;
+  pageSpans?: PageSpanDto[];
 }
 
 export interface ChatAskResponse {
@@ -131,6 +145,10 @@ export const backendApi = {
 
   pdfUrl(documentId: string | number): string {
     return `/api/documents/${documentId}/pdf`;
+  },
+
+  pageImageUrl(documentId: string | number, pageNumber: string | number): string {
+    return `/api/documents/${documentId}/pages/${pageNumber}/image`;
   },
 
   register(payload: { email: string; password: string; displayName?: string; username?: string }): Promise<AuthResponse> {

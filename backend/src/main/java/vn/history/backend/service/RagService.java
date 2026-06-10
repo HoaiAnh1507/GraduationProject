@@ -130,7 +130,8 @@ public class RagService {
                     c.chunkIndex(),
                     c.pageStart(),
                     c.pageEnd(),
-                    quote
+                    quote,
+                    c.pageSpans()
             ));
         }
         return out;

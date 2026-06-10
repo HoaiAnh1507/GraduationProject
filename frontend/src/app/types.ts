@@ -1,5 +1,18 @@
 export type MessageRole = "user" | "assistant";
 
+export interface BBoxSpan {
+  x0: number;
+  top: number;
+  x1: number;
+  bottom: number;
+}
+
+export interface PageSpan {
+  page_number: number;
+  bbox_span: BBoxSpan;
+  token_count?: number;
+}
+
 export interface Citation {
   id: string;
   fileName: string;
@@ -13,6 +26,7 @@ export interface Citation {
   title?: string;
   pageStart?: number;
   pageEnd?: number;
+  pageSpans?: PageSpan[];
 }
 
 export interface Flashcard {

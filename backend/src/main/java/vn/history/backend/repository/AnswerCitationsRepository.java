@@ -1,5 +1,7 @@
 package vn.history.backend.repository;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -14,9 +16,11 @@ import java.util.Map;
 public class AnswerCitationsRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public AnswerCitationsRepository(JdbcTemplate jdbcTemplate) {
+    public AnswerCitationsRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public void insertMany(long assistantMessageId, List<CitationRow> citations) {
@@ -57,7 +61,8 @@ public class AnswerCitationsRepository {
                                     rc.chunk_index,
                                     rc.page_start,
                                     rc.page_end,
-                                    ac.quote_text
+                                    ac.quote_text,
+                                    rc.page_spans_json
                                 FROM answer_citations ac
                                 JOIN rag_chunks rc ON rc.id = ac.chunk_id
                                 JOIN documents d ON d.id = rc.document_id
@@ -77,11 +82,24 @@ public class AnswerCitationsRepository {
                     rs.getInt("chunk_index"),
                     rs.getInt("page_start"),
                     rs.getInt("page_end"),
-                    rs.getString("quote_text")
+                    rs.getString("quote_text"),
+                    parseArrayJson(rs.getObject("page_spans_json"))
             );
             out.computeIfAbsent(msgId, k -> new ArrayList<>()).add(dto);
         });
         return out;
+    }
+
+    private JsonNode parseArrayJson(Object pgJson) {
+        if (pgJson == null) {
+            return objectMapper.createArrayNode();
+        }
+        try {
+            JsonNode node = objectMapper.readTree(pgJson.toString());
+            return node.isArray() ? node : objectMapper.createArrayNode();
+        } catch (Exception e) {
+            return objectMapper.createArrayNode();
+        }
     }
 
     public record CitationRow(

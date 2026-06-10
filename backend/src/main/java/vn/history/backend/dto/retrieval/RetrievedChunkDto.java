@@ -1,5 +1,7 @@
 package vn.history.backend.dto.retrieval;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 public record RetrievedChunkDto(
         long chunkId,
         long documentId,
@@ -11,6 +13,7 @@ public record RetrievedChunkDto(
         Integer wordCount,
         String content,
         double score,
-        String matchedBy
+        String matchedBy,
+        JsonNode pageSpans
 ) {
 }

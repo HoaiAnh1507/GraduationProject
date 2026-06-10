@@ -9,14 +9,24 @@ interface PDFViewerModalProps {
   onClose: () => void;
 }
 
+const PDF_POINTS_PER_INCH = 72;
+const PAGE_IMAGE_DPI = 150;
+const POINT_TO_IMAGE_PX = PAGE_IMAGE_DPI / PDF_POINTS_PER_INCH;
+
 export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
   const [currentPage, setCurrentPage] = useState(citation?.page ?? 1);
   const [zoom, setZoom] = useState(100);
   const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [pageImageSize, setPageImageSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (citation?.page) setCurrentPage(citation.page);
+    setPageImageSize(null);
   }, [citation]);
+
+  useEffect(() => {
+    setPageImageSize(null);
+  }, [currentPage, citation?.documentId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +62,21 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
   const fallbackTotalPages = Math.max(citation.page ? citation.page + 20 : 50, 50);
   const effectiveTotalPages = totalPages ?? fallbackTotalPages;
   const pdfUrl = citation.documentId ? backendApi.pdfUrl(citation.documentId) : null;
-  const pdfSrc = pdfUrl ? `${pdfUrl}#page=${currentPage}` : null;
+  const pageImageSrc = citation.documentId ? backendApi.pageImageUrl(citation.documentId, currentPage) : null;
+  const highlightScale = POINT_TO_IMAGE_PX * (zoom / 100);
+  const pageSpans = (citation.pageSpans ?? []).filter((span) => {
+    const bbox = span?.bbox_span;
+    return (
+      span?.page_number === currentPage &&
+      bbox &&
+      Number.isFinite(bbox.x0) &&
+      Number.isFinite(bbox.top) &&
+      Number.isFinite(bbox.x1) &&
+      Number.isFinite(bbox.bottom)
+    );
+  });
+  const renderedImageWidth = pageImageSize ? pageImageSize.width * (zoom / 100) : undefined;
+  const renderedImageHeight = pageImageSize ? pageImageSize.height * (zoom / 100) : undefined;
 
   return (
     <AnimatePresence>
@@ -202,7 +226,7 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
 
             {/* Right: PDF page content */}
             <div
-              className="flex-1 overflow-y-auto flex justify-center p-6"
+              className="flex-1 overflow-auto flex justify-center p-6"
               style={{
                 background: "rgba(8,14,28,0.6)",
                 scrollbarWidth: "thin",
@@ -216,7 +240,7 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                 transition={{ duration: 0.2 }}
                 style={{
                   width: "100%",
-                  maxWidth: "900px",
+                  maxWidth: "none",
                   minWidth: "300px",
                   minHeight: "500px",
                 }}
@@ -229,19 +253,51 @@ export function PDFViewerModal({ citation, onClose }: PDFViewerModalProps) {
                     overflow: "hidden",
                   }}
                 >
-                  {pdfSrc ? (
+                  {pageImageSrc ? (
                     <div
                       style={{
-                        transform: `scale(${zoom / 100})`,
-                        transformOrigin: "top center",
-                        width: "100%",
+                        position: "relative",
+                        width: renderedImageWidth ? `${renderedImageWidth}px` : "100%",
+                        height: renderedImageHeight ? `${renderedImageHeight}px` : "auto",
+                        lineHeight: 0,
                       }}
                     >
-                      <iframe
+                      <img
                         title={citation.fileName}
-                        src={pdfSrc}
-                        style={{ width: "100%", height: "900px", border: "none" }}
+                        src={pageImageSrc}
+                        alt={`${citation.fileName} - trang ${currentPage}`}
+                        onLoad={(e) => {
+                          setPageImageSize({
+                            width: e.currentTarget.naturalWidth,
+                            height: e.currentTarget.naturalHeight,
+                          });
+                        }}
+                        style={{
+                          display: "block",
+                          width: renderedImageWidth ? `${renderedImageWidth}px` : "100%",
+                          height: renderedImageHeight ? `${renderedImageHeight}px` : "auto",
+                          userSelect: "none",
+                        }}
                       />
+                      {pageSpans.map((span, index) => {
+                        const bbox = span.bbox_span;
+                        return (
+                          <div
+                            key={`${span.page_number}-${index}`}
+                            style={{
+                              position: "absolute",
+                              left: `${bbox.x0 * highlightScale}px`,
+                              top: `${bbox.top * highlightScale}px`,
+                              width: `${Math.max(1, (bbox.x1 - bbox.x0) * highlightScale)}px`,
+                              height: `${Math.max(1, (bbox.bottom - bbox.top) * highlightScale)}px`,
+                              background: "rgba(255, 221, 64, 0.38)",
+                              border: "1px solid rgba(255, 193, 7, 0.65)",
+                              boxShadow: "0 0 0 1px rgba(120, 80, 0, 0.12)",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-6" style={{ color: "rgba(60,40,20,0.7)" }}>
