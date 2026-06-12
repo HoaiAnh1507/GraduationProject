@@ -92,6 +92,38 @@ export interface ChatTurnPayload {
   content: string;
 }
 
+export interface BackendFlashcard {
+  id: number;
+  question: string;
+  answer: string;
+  status: "new" | "learning" | "mastered";
+  source: "manual" | "suggested" | "conversation_rule";
+  sourceConversationId: number | null;
+  sourceMessageId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendFlashcardDeck {
+  id: number;
+  title: string;
+  topic: string;
+  description: string | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cards: BackendFlashcard[];
+}
+
+export interface FlashcardCardPayload {
+  question: string;
+  answer: string;
+  status?: "new" | "learning" | "mastered";
+  source?: "manual" | "suggested" | "conversation_rule";
+  sourceConversationId?: number | null;
+  sourceMessageId?: number | null;
+}
+
 function basename(p: string): string {
   if (!p) return p;
   const parts = p.split(/[/\\]/g);
@@ -218,5 +250,39 @@ export const backendApi = {
     if (params?.after) query.set("after", params.after);
     const qs = query.toString();
     return httpJson<ConversationMessage[]>(`/api/conversations/${id}/messages${qs ? `?${qs}` : ""}`);
+  },
+
+  listFlashcardDecks(): Promise<BackendFlashcardDeck[]> {
+    return httpJson<BackendFlashcardDeck[]>("/api/flashcards/decks");
+  },
+
+  createFlashcardDeck(payload: {
+    title: string;
+    topic?: string | null;
+    description?: string | null;
+    color?: string | null;
+    cards: FlashcardCardPayload[];
+  }): Promise<BackendFlashcardDeck> {
+    return httpJson<BackendFlashcardDeck>("/api/flashcards/decks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  addFlashcardsToDeck(deckId: number, cards: FlashcardCardPayload[]): Promise<BackendFlashcardDeck> {
+    return httpJson<BackendFlashcardDeck>(`/api/flashcards/decks/${deckId}/cards/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards }),
+    });
+  },
+
+  updateFlashcardStatus(cardId: number, status: "new" | "learning" | "mastered"): Promise<BackendFlashcard> {
+    return httpJson<BackendFlashcard>(`/api/flashcards/cards/${cardId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
   },
 };

@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { GraduationCap, Plus, Sparkles } from "lucide-react";
-import { Flashcard } from "../types";
+import { Flashcard, Message } from "../types";
 import { FlashcardEditor } from "./FlashcardEditor";
 import { AnimatePresence } from "motion/react";
 
 interface FlashcardsCreateButtonProps {
   suggestedCards?: Flashcard[];
-  messageContext?: string;
+  conversationMessages?: Message[];
+  conversationId?: string | null;
 }
 
-export function FlashcardsCreateButton({ suggestedCards, messageContext: _messageContext }: FlashcardsCreateButtonProps) {
+export function FlashcardsCreateButton({ suggestedCards, conversationMessages, conversationId }: FlashcardsCreateButtonProps) {
   const [editorOpen, setEditorOpen] = useState(false);
   const count = suggestedCards?.length ?? 0;
 
@@ -48,6 +49,8 @@ export function FlashcardsCreateButton({ suggestedCards, messageContext: _messag
         {editorOpen && (
           <FlashcardEditor
             suggestedCards={suggestedCards}
+            conversationMessages={conversationMessages}
+            conversationId={conversationId}
             onClose={() => setEditorOpen(false)}
           />
         )}

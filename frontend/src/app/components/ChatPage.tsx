@@ -285,6 +285,8 @@ export function ChatPage({ conversation, onUpdateConversation, onCreateConversat
                 <MessageBubble
                   key={msg.id}
                   message={msg}
+                  conversationMessages={messages}
+                  conversationId={conversation?.id ?? null}
                   onFeedback={handleFeedback}
                   onRetry={handleRetry}
                   onExploreRelated={handleExploreRelated}

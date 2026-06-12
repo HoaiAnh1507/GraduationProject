@@ -34,6 +34,9 @@ export interface Flashcard {
   question: string;
   answer: string;
   status?: "new" | "learning" | "mastered";
+  source?: "manual" | "suggested" | "conversation_rule";
+  sourceConversationId?: number | null;
+  sourceMessageId?: number | null;
 }
 
 export interface FlashcardDeck {

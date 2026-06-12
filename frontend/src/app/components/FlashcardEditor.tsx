@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { X, Plus, Trash2, GraduationCap, Save, RotateCcw, ChevronDown } from "lucide-react";
-import { Flashcard, FlashcardDeck } from "../types";
+import { X, Plus, Trash2, GraduationCap, Save, RotateCcw, ChevronDown, Sparkles } from "lucide-react";
+import { Flashcard, Message } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../context/AppContext";
 
@@ -9,20 +9,150 @@ interface EditableCard {
   question: string;
   answer: string;
   previewFlipped: boolean;
+  source?: "manual" | "suggested" | "conversation_rule";
+  sourceConversationId?: number | null;
+  sourceMessageId?: number | null;
 }
 
 interface FlashcardEditorProps {
   suggestedCards?: Flashcard[];
+  conversationMessages?: Message[];
+  conversationId?: string | null;
   onClose: () => void;
 }
 
-export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEditorProps) {
+interface ConversationCardSource {
+  userQuestion?: string;
+  assistantAnswer: string;
+  sourceConversationId?: number | null;
+  sourceMessageId?: number | null;
+}
+
+const DEFAULT_DECK_TOPIC = "Lịch sử Việt Nam";
+const HISTORY_KEYWORDS: string[] = [];
+
+const makeDraftId = (prefix: string) =>
+  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const parseNumericId = (id?: string | null): number | null => {
+  if (!id) return null;
+  const n = Number(id);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+const stripMarkdown = (value: string) =>
+  value
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeSearchText = (value: string) =>
+  stripMarkdown(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+
+const splitSentences = (value: string) =>
+  stripMarkdown(value)
+    .match(/[^.!?]+[.!?]?/g)
+    ?.map((s) => s.trim())
+    .filter(Boolean) ?? [];
+
+const shortenAnswer = (value: string, maxLength = 620) => {
+  const sentences = splitSentences(value);
+  const summary = sentences.slice(0, 3).join(" ");
+  const clean = summary || stripMarkdown(value);
+  return clean.length > maxLength ? `${clean.slice(0, maxLength).trim()}...` : clean;
+};
+
+const findSentenceContaining = (sentences: string[], keyword: string) =>
+  sentences.find((sentence) => normalizeSearchText(sentence).includes(normalizeSearchText(keyword)));
+
+const isFailedAssistantMessage = (message: Message) => {
+  if (message.isError) return true;
+  const content = normalizeSearchText(message.content);
+  return (
+    content.includes("khong the goi backend") ||
+    content.includes("khong the xu ly") ||
+    content.includes("da xay ra loi") ||
+    content.includes("xin loi he thong gap loi khi xu ly yeu cau")
+  );
+};
+
+const collectConversationCardSources = (messages: Message[], conversationId?: string | null): ConversationCardSource[] => {
+  const sources: ConversationCardSource[] = [];
+  let previousUserQuestion: string | undefined;
+  const sourceConversationId = parseNumericId(conversationId);
+
+  messages.forEach((message) => {
+    if (message.role === "user") {
+      previousUserQuestion = message.content;
+      return;
+    }
+
+    if (message.role !== "assistant" || isFailedAssistantMessage(message) || !message.content.trim()) {
+      return;
+    }
+
+    sources.push({
+      userQuestion: previousUserQuestion,
+      assistantAnswer: message.content,
+      sourceConversationId,
+      sourceMessageId: parseNumericId(message.id),
+    });
+  });
+
+  return sources;
+};
+
+const generateRuleBasedCards = (source?: ConversationCardSource): EditableCard[] => {
+  const assistantAnswer = source?.assistantAnswer?.trim();
+  if (!assistantAnswer || !source?.userQuestion?.trim()) return [];
+
+  const card: EditableCard = {
+    id: makeDraftId("rule"),
+    question: stripMarkdown(source.userQuestion),
+    answer: shortenAnswer(assistantAnswer),
+    previewFlipped: false,
+    source: "conversation_rule",
+    sourceConversationId: source.sourceConversationId,
+    sourceMessageId: source.sourceMessageId,
+  };
+
+  return card.question && card.answer ? [card] : [];
+};
+const generateRuleBasedCardsFromConversation = (messages: Message[], conversationId?: string | null): EditableCard[] => {
+  const seenQuestions = new Set<string>();
+  return collectConversationCardSources(messages, conversationId).flatMap((source) =>
+    generateRuleBasedCards(source).filter((card) => {
+      const key = normalizeSearchText(card.question);
+      if (seenQuestions.has(key)) return false;
+      seenQuestions.add(key);
+      return true;
+    })
+  );
+};
+
+export function FlashcardEditor({ suggestedCards = [], conversationMessages = [], conversationId, onClose }: FlashcardEditorProps) {
   const { flashcardDecks, addCardsToDeck, createDeck } = useApp();
 
   const [cards, setCards] = useState<EditableCard[]>(() =>
     suggestedCards.length > 0
-      ? suggestedCards.map((c) => ({ id: c.id, question: c.question, answer: c.answer, previewFlipped: false }))
-      : [{ id: `new_${Date.now()}`, question: "", answer: "", previewFlipped: false }]
+      ? suggestedCards.map((c) => ({
+          id: c.id,
+          question: c.question,
+          answer: c.answer,
+          previewFlipped: false,
+          source: "suggested",
+          sourceConversationId: c.sourceConversationId,
+          sourceMessageId: c.sourceMessageId,
+        }))
+      : [{ id: makeDraftId("new"), question: "", answer: "", previewFlipped: false, source: "manual" }]
   );
 
   const [selectedDeckId, setSelectedDeckId] = useState<string>(
@@ -31,6 +161,7 @@ export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEdito
   const [newDeckTitle, setNewDeckTitle] = useState("");
   const [newDeckTopic, setNewDeckTopic] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
 
   const updateCard = (index: number, field: "question" | "answer", value: string) => {
@@ -39,13 +170,26 @@ export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEdito
 
   const addCard = () => {
     const newCard: EditableCard = {
-      id: `new_${Date.now()}`,
+      id: makeDraftId("new"),
       question: "",
       answer: "",
       previewFlipped: false,
+      source: "manual",
     };
     setCards((prev) => [...prev, newCard]);
     setActiveCardIndex(cards.length);
+  };
+
+  const generateFromConversation = () => {
+    const existingQuestions = new Set(cards.map((card) => normalizeSearchText(card.question)));
+    const generatedCards = generateRuleBasedCardsFromConversation(conversationMessages, conversationId).filter(
+      (card) => !existingQuestions.has(normalizeSearchText(card.question))
+    );
+    if (generatedCards.length === 0) return;
+
+    const firstGeneratedIndex = cards.length;
+    setCards((prev) => [...prev, ...generatedCards]);
+    setActiveCardIndex(firstGeneratedIndex);
   };
 
   const removeCard = (index: number) => {
@@ -58,35 +202,45 @@ export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEdito
     setCards((prev) => prev.map((c, i) => (i === index ? { ...c, previewFlipped: !c.previewFlipped } : c)));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const validCards = cards.filter((c) => c.question.trim() && c.answer.trim());
     if (validCards.length === 0) return;
+    if (selectedDeckId === "__new__" && !newDeckTitle.trim()) return;
 
     const flashcardsToSave: Flashcard[] = validCards.map((c) => ({
       id: `fc_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       question: c.question,
       answer: c.answer,
       status: "new",
+      source: c.source ?? "manual",
+      sourceConversationId: c.sourceConversationId,
+      sourceMessageId: c.sourceMessageId,
     }));
 
+    setSaving(true);
+    try {
     if (selectedDeckId === "__new__") {
       if (!newDeckTitle.trim()) return;
-      createDeck({
+      await createDeck({
         title: newDeckTitle,
-        topic: newDeckTopic || "Lịch sử Việt Nam",
+        topic: newDeckTopic || DEFAULT_DECK_TOPIC,
         cards: flashcardsToSave,
         color: "#c9a84c",
       });
     } else {
-      addCardsToDeck(selectedDeckId, flashcardsToSave);
+      await addCardsToDeck(selectedDeckId, flashcardsToSave);
     }
 
     setSaved(true);
     setTimeout(onClose, 1200);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const validCount = cards.filter((c) => c.question.trim() && c.answer.trim()).length;
   const activeCard = cards[activeCardIndex];
+  const canGenerateFromConversation = collectConversationCardSources(conversationMessages, conversationId).length > 0;
 
   return (
     <div
@@ -302,6 +456,21 @@ export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEdito
             className="w-52 flex-shrink-0 flex flex-col p-4 gap-4"
             style={{ borderLeft: "1px solid rgba(255,255,255,0.06)" }}
           >
+            <button
+              onClick={generateFromConversation}
+              disabled={!canGenerateFromConversation}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: "rgba(201,168,76,0.1)",
+                color: "var(--t-gold)",
+                border: "1px solid rgba(201,168,76,0.28)",
+              }}
+              title="Sinh thêm thẻ nháp bằng rule từ câu hỏi và câu trả lời hiện tại"
+            >
+              <Sparkles size={13} />
+              Sinh thẻ từ hội thoại
+            </button>
+
             <div>
               <label className="block text-xs mb-2" style={{ color: "rgba(255,255,255,0.4)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 Lưu vào bộ thẻ
@@ -404,7 +573,7 @@ export function FlashcardEditor({ suggestedCards = [], onClose }: FlashcardEdito
               ) : (
                 <button
                   onClick={handleSave}
-                  disabled={validCount === 0 || (selectedDeckId === "__new__" && !newDeckTitle.trim())}
+                  disabled={saving || validCount === 0 || (selectedDeckId === "__new__" && !newDeckTitle.trim())}
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
                     background: "linear-gradient(135deg, #a06aff, #7040cc)",

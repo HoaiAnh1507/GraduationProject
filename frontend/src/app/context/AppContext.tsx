@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Conversation, FlashcardDeck, Flashcard, Message } from "../types";
-import { INITIAL_FLASHCARD_DECKS } from "../mockData";
-import { backendApi, ConversationSummary } from "../api/backendApi";
+import { backendApi, BackendFlashcardDeck, ConversationSummary } from "../api/backendApi";
 import { useAuth } from "./AuthContext";
 
 const GUEST_PREFIX = "guest_";
@@ -35,6 +34,30 @@ const mapConversationSummaries = (rows: ConversationSummary[]): Conversation[] =
     };
   });
 
+const mapFlashcardDeck = (deck: BackendFlashcardDeck): FlashcardDeck => ({
+  id: String(deck.id),
+  title: deck.title,
+  topic: deck.topic,
+  description: deck.description ?? undefined,
+  cards: deck.cards.map((card) => ({
+    id: String(card.id),
+    question: card.question,
+    answer: card.answer,
+    status: card.status,
+    source: card.source,
+    sourceConversationId: card.sourceConversationId,
+    sourceMessageId: card.sourceMessageId,
+  })),
+  createdAt: new Date(deck.createdAt),
+  color: deck.color ?? undefined,
+});
+
+const normalizeDeckTopic = (topic?: string): string | null => {
+  const clean = topic?.trim();
+  if (!clean) return null;
+  return /[\u00bb\u00c6\u00c4]/.test(clean) ? "Lịch sử Việt Nam" : clean;
+};
+
 interface AppContextValue {
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
@@ -42,8 +65,9 @@ interface AppContextValue {
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   flashcardDecks: FlashcardDeck[];
   setFlashcardDecks: React.Dispatch<React.SetStateAction<FlashcardDeck[]>>;
-  addCardsToDeck: (deckId: string, cards: Flashcard[]) => void;
-  createDeck: (deck: Omit<FlashcardDeck, "id" | "createdAt">) => string;
+  addCardsToDeck: (deckId: string, cards: Flashcard[]) => Promise<void>;
+  createDeck: (deck: Omit<FlashcardDeck, "id" | "createdAt">) => Promise<string>;
+  updateFlashcardStatus: (cardId: string, status: "new" | "learning" | "mastered") => Promise<void>;
   createConversation: (title?: string) => Promise<string>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -56,7 +80,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { user, isLoading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [flashcardDecks, setFlashcardDecks] = useState<FlashcardDeck[]>(INITIAL_FLASHCARD_DECKS);
+  const [flashcardDecks, setFlashcardDecks] = useState<FlashcardDeck[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -64,9 +88,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     const loadUserConversations = async () => {
-      const rows = await backendApi.listConversations();
+      const [rows, deckRows] = await Promise.all([
+        backendApi.listConversations(),
+        backendApi.listFlashcardDecks(),
+      ]);
       if (!active) return;
       const serverConvs = mapConversationSummaries(rows);
+      setFlashcardDecks(deckRows.map(mapFlashcardDeck));
       if (sessionStorage.getItem(OPEN_NEW_CHAT_AFTER_LOGIN) === "1") {
         sessionStorage.removeItem(OPEN_NEW_CHAT_AFTER_LOGIN);
         setConversations(serverConvs);
@@ -80,6 +108,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setConversations([]);
       setActiveConversationId(null);
+      setFlashcardDecks([]);
       return () => {
         active = false;
       };
@@ -94,7 +123,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [authLoading, user]);
 
-  const addCardsToDeck = (deckId: string, cards: Flashcard[]) => {
+  const addCardsToDeck = async (deckId: string, cards: Flashcard[]): Promise<void> => {
+    const serverDeckId = parseServerId(deckId);
+    if (user && serverDeckId != null) {
+      const savedDeck = await backendApi.addFlashcardsToDeck(
+        serverDeckId,
+        cards.map((card) => ({
+          question: card.question,
+          answer: card.answer,
+          status: card.status ?? "new",
+          source: card.source ?? "manual",
+          sourceConversationId: card.sourceConversationId,
+          sourceMessageId: card.sourceMessageId,
+        }))
+      );
+      setFlashcardDecks((prev) =>
+        prev.map((deck) => (deck.id === deckId ? mapFlashcardDeck(savedDeck) : deck))
+      );
+      return;
+    }
+
     setFlashcardDecks((prev) =>
       prev.map((deck) =>
         deck.id === deckId
@@ -104,7 +152,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const createDeck = (deckData: Omit<FlashcardDeck, "id" | "createdAt">): string => {
+  const createDeck = async (deckData: Omit<FlashcardDeck, "id" | "createdAt">): Promise<string> => {
+    if (user) {
+      const savedDeck = await backendApi.createFlashcardDeck({
+        title: deckData.title,
+        topic: normalizeDeckTopic(deckData.topic),
+        description: deckData.description,
+        color: deckData.color,
+        cards: deckData.cards.map((card) => ({
+          question: card.question,
+          answer: card.answer,
+          status: card.status ?? "new",
+          source: card.source ?? "manual",
+          sourceConversationId: card.sourceConversationId,
+          sourceMessageId: card.sourceMessageId,
+        })),
+      });
+      const mappedDeck = mapFlashcardDeck(savedDeck);
+      setFlashcardDecks((prev) => [mappedDeck, ...prev]);
+      return mappedDeck.id;
+    }
+
     const id = `deck_${Date.now()}`;
     const newDeck: FlashcardDeck = {
       ...deckData,
@@ -113,6 +181,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setFlashcardDecks((prev) => [...prev, newDeck]);
     return id;
+  };
+
+  const updateFlashcardStatus = async (cardId: string, status: "new" | "learning" | "mastered"): Promise<void> => {
+    setFlashcardDecks((prev) =>
+      prev.map((deck) => ({
+        ...deck,
+        lastStudied: new Date(),
+        cards: deck.cards.map((card) =>
+          card.id === cardId ? { ...card, status } : card
+        ),
+      }))
+    );
+
+    const serverCardId = parseServerId(cardId);
+    if (user && serverCardId != null) {
+      const savedCard = await backendApi.updateFlashcardStatus(serverCardId, status);
+      setFlashcardDecks((prev) =>
+        prev.map((deck) => ({
+          ...deck,
+          cards: deck.cards.map((card) =>
+            card.id === cardId
+              ? {
+                  ...card,
+                  status: savedCard.status,
+                  source: savedCard.source,
+                  sourceConversationId: savedCard.sourceConversationId,
+                  sourceMessageId: savedCard.sourceMessageId,
+                }
+              : card
+          ),
+        }))
+      );
+    }
   };
 
   const createConversation = async (title?: string): Promise<string> => {
@@ -209,6 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setFlashcardDecks,
         addCardsToDeck,
         createDeck,
+        updateFlashcardStatus,
         createConversation,
         updateConversationTitle,
         deleteConversation,

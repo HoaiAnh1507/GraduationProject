@@ -8,6 +8,8 @@ import { motion } from "motion/react";
 
 interface MessageBubbleProps {
   message: Message;
+  conversationMessages?: Message[];
+  conversationId?: string | null;
   onFeedback: (id: string, type: "helpful" | "not_helpful") => void;
   onRetry?: (id: string) => void;
   onExploreRelated?: (topic: string) => void;
@@ -73,7 +75,7 @@ function parseMarkdown(text: string): React.ReactNode[] {
   return result;
 }
 
-export function MessageBubble({ message, onFeedback, onRetry, onExploreRelated, onOpenPDF }: MessageBubbleProps) {
+export function MessageBubble({ message, conversationMessages = [], conversationId, onFeedback, onRetry, onExploreRelated, onOpenPDF }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 
@@ -171,7 +173,11 @@ export function MessageBubble({ message, onFeedback, onRetry, onExploreRelated, 
             {/* Create Flashcard button */}
             {isAssistant && !message.isError && (
               <div className="mt-3">
-                <FlashcardsCreateButton suggestedCards={message.suggestedFlashcards} />
+                <FlashcardsCreateButton
+                  suggestedCards={message.suggestedFlashcards}
+                  conversationMessages={conversationMessages}
+                  conversationId={conversationId}
+                />
               </div>
             )}
 

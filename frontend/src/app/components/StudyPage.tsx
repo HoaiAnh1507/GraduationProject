@@ -80,7 +80,7 @@ function FlipCard({ card, flipped, onFlip }: { card: StudyCard; flipped: boolean
 export function StudyPage() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
-  const { flashcardDecks, setFlashcardDecks } = useApp();
+  const { flashcardDecks, updateFlashcardStatus } = useApp();
 
   const deck = flashcardDecks.find((d) => d.id === deckId);
 
@@ -118,23 +118,14 @@ export function StudyPage() {
   };
 
   const handleRate = (status: "mastered" | "learning" | "skipped") => {
+    const persistedStatus: "mastered" | "learning" = status === "skipped" ? "learning" : status;
+    const ratedCard = cards[currentIndex];
     const updated = cards.map((c, i) => i === currentIndex ? { ...c, studyStatus: status } : c);
     setCards(updated);
 
-    // Also update the deck in context
-    setFlashcardDecks((prev) =>
-      prev.map((d) =>
-        d.id === deckId
-          ? {
-              ...d,
-              lastStudied: new Date(),
-              cards: d.cards.map((c, i) =>
-                i === currentIndex ? { ...c, status: status === "skipped" ? "learning" : status } : c
-              ),
-            }
-          : d
-      )
-    );
+    updateFlashcardStatus(ratedCard.id, persistedStatus).catch(() => {
+      // Keep the local study flow moving even if the backend is temporarily unavailable.
+    });
 
     if (currentIndex < cards.length - 1) {
       navigateTo(currentIndex + 1);
@@ -145,6 +136,9 @@ export function StudyPage() {
 
   const handleRestart = () => {
     setCards((prev) => prev.map((c) => ({ ...c, studyStatus: "new" as StudyStatus })));
+    Promise.all(cards.map((card) => updateFlashcardStatus(card.id, "new"))).catch(() => {
+      // Restart remains usable offline; persisted progress will retry on the next explicit rating.
+    });
     setCurrentIndex(0);
     setFlipped(false);
     setSessionDone(false);
