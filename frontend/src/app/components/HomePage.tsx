@@ -8,11 +8,9 @@ export function HomePage() {
   const navigate = useNavigate();
   const { flashcardDecks, setActiveConversationId, conversations } = useApp();
 
-  const handleStartChat = (question?: string) => {
+  const handleStartChat = () => {
+    setActiveConversationId(null);
     navigate("/chat");
-    if (question) {
-      setActiveConversationId(conversations[0]?.id ?? null);
-    }
   };
 
   const handleGoToLesson = (topicId: string) => {

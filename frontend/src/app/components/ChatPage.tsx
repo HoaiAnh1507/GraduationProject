@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Database, Info, Search, Settings, Zap } from "lucide-react";
+import { Database, Info, LogIn, Search, Settings, UserPlus, Zap } from "lucide-react";
+import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Message, Conversation, Citation } from "../types";
 import { backendApi } from "../api/backendApi";
@@ -8,6 +9,7 @@ import { MessageLoadingSkeleton } from "./LoadingSkeleton";
 import { EmptyState } from "./EmptyState";
 import { ChatInput } from "./ChatInput";
 import { PDFViewerModal } from "./PDFViewerModal";
+import { useAuth } from "../context/AuthContext";
 
 interface ChatPageProps {
   conversation: Conversation | null;
@@ -19,6 +21,9 @@ let msgIdCounter = 1000;
 const newId = () => `msg_${++msgIdCounter}`;
 
 function TopBar({ title, documentCount }: { title: string; documentCount?: number }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
   return (
     <div
       className="flex items-center justify-between px-6 py-3 flex-shrink-0"
@@ -57,6 +62,27 @@ function TopBar({ title, documentCount }: { title: string; documentCount?: numbe
       </div>
 
       <div className="flex items-center gap-2">
+        {!user && (
+          <>
+            <button
+              onClick={() => navigate("/login")}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs transition-all hover:opacity-90"
+              style={{ background: "linear-gradient(135deg, #c9a84c, #a87c2a)", color: "white" }}
+            >
+              <LogIn size={13} />
+              <span>Đăng nhập</span>
+            </button>
+            <button
+              onClick={() => navigate("/login?mode=register")}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs transition-all hover:opacity-80"
+              style={{ background: "var(--t-btn-ghost-bg)", color: "var(--t-text-2)", border: "1px solid var(--t-btn-border)" }}
+            >
+              <UserPlus size={13} />
+              <span>Đăng ký</span>
+            </button>
+          </>
+        )}
+
         <div
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
           style={{ background: "rgba(99,153,255,0.08)", border: "1px solid rgba(99,153,255,0.15)" }}

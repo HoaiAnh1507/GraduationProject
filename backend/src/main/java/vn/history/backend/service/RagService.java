@@ -9,11 +9,17 @@ import vn.history.backend.dto.retrieval.RetrievedChunkDto;
 import vn.history.backend.service.embedding.EmbeddingClient;
 import vn.history.backend.service.llm.LlmClient;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class RagService {
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
 
     private final RetrievalService retrievalService;
     private final EmbeddingClient embeddingClient;
@@ -39,10 +45,9 @@ public class RagService {
         var retrieval = retrievalService.search(req.query(), topK, queryEmbedding);
         List<RetrievedChunkDto> chunks = retrieval.results();
 
-        List<CitationDto> citations = buildCitations(chunks);
-
         if (!llmEnabled) {
             String answer = buildRetrievalOnlyAnswer(req.query(), chunks);
+            List<CitationDto> citations = buildCitations(limitChunks(chunks, Math.min(3, chunks.size())));
             return new ChatAskResponse(answer, citations);
         }
 
@@ -56,7 +61,88 @@ public class RagService {
         String userPrompt = buildUserPrompt(req.query(), chunks);
 
         String answer = llmClient.chat(systemPrompt, userPrompt);
+        List<CitationDto> citations = buildCitations(filterCitedChunks(answer, chunks));
         return new ChatAskResponse(answer, citations);
+    }
+
+    private List<RetrievedChunkDto> filterCitedChunks(String answer, List<RetrievedChunkDto> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> usedChunkIds = extractUsedChunkIds(answer, chunks);
+        if (usedChunkIds.isEmpty()) {
+            return List.of(chunks.get(0));
+        }
+
+        List<RetrievedChunkDto> out = new ArrayList<>();
+        for (RetrievedChunkDto chunk : chunks) {
+            if (usedChunkIds.contains(chunk.chunkId())) {
+                out.add(chunk);
+            }
+        }
+        return out.isEmpty() ? List.of(chunks.get(0)) : out;
+    }
+
+    private Set<Long> extractUsedChunkIds(String answer, List<RetrievedChunkDto> chunks) {
+        Set<Long> validIds = new LinkedHashSet<>();
+        for (RetrievedChunkDto chunk : chunks) {
+            validIds.add(chunk.chunkId());
+        }
+
+        String sourceSection = extractSourcesSection(answer);
+        Set<Long> out = parseChunkIds(sourceSection, validIds);
+        if (!out.isEmpty()) {
+            return out;
+        }
+
+        return parseChunkIds(answer, validIds);
+    }
+
+    private String extractSourcesSection(String answer) {
+        if (answer == null || answer.isBlank()) {
+            return "";
+        }
+
+        String normalized = removeVietnameseAccents(answer).toLowerCase();
+        int idx = normalized.lastIndexOf("nguon tham khao");
+        if (idx < 0) {
+            idx = normalized.lastIndexOf("nguon");
+        }
+        return idx >= 0 ? answer.substring(idx) : "";
+    }
+
+    private Set<Long> parseChunkIds(String text, Set<Long> validIds) {
+        Set<Long> out = new LinkedHashSet<>();
+        if (text == null || text.isBlank()) {
+            return out;
+        }
+
+        Matcher matcher = NUMBER_PATTERN.matcher(text);
+        while (matcher.find()) {
+            try {
+                long id = Long.parseLong(matcher.group());
+                if (validIds.contains(id)) {
+                    out.add(id);
+                }
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed numbers.
+            }
+        }
+        return out;
+    }
+
+    private String removeVietnameseAccents(String text) {
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return normalized.replace('đ', 'd').replace('Đ', 'D');
+    }
+
+    private List<RetrievedChunkDto> limitChunks(List<RetrievedChunkDto> chunks, int limit) {
+        if (chunks == null || chunks.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        return chunks.subList(0, Math.min(limit, chunks.size()));
     }
 
     private String buildRetrievalOnlyAnswer(String query, List<RetrievedChunkDto> chunks) {

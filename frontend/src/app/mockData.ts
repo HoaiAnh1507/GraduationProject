@@ -244,7 +244,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
     category: "Kháng chiến chống Pháp",
     readTime: 12,
     overview:
-      "Chiến dịch Điện Biên Phủ (13/3 – 7/5/1954) là trận quyết chiến chiến lược, đánh bại hoàn toàn ý chí xâm lược của thực dân Pháp, buộc Pháp phải ký kết Hiệp định Genève, chấm dứt cuộc chi���n tranh Đông Dương lần thứ nhất. Chiến thắng này gây chấn động thế giới và đánh dấu sự sụp đổ của chủ nghĩa thực dân cũ ở châu Á.",
+      "Chiến dịch Điện Biên Phủ (13/3 – 7/5/1954) là trận quyết chiến chiến lược, đánh bại hoàn toàn ý chí xâm lược của thực dân Pháp, buộc Pháp phải ký kết Hiệp định Genève, chấm dứt cuộc chiến tranh Đông Dương lần thứ nhất. Chiến thắng này gây chấn động thế giới và đánh dấu sự sụp đổ của chủ nghĩa thực dân cũ ở châu Á.",
     sections: [
       {
         heading: "Bối cảnh chiến dịch",
@@ -355,7 +355,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
     category: "Thời kỳ Bắc thuộc",
     readTime: 8,
     overview:
-      "Cuộc khởi nghĩa Hai Bà Trưng (năm 40 CN) là cuộc khởi nghĩa đầu tiên giành lại độc lập sau hơn 200 năm Bắc thuộc lần đầu. Trưng Trắc và Trưng Nhị lãnh ��ạo nghĩa quân đánh đuổi thái thú Tô Định, giải phóng 65 thành trì, lập ra nhà nước tự chủ kéo dài 3 năm. Cuộc khởi nghĩa là biểu tượng bất diệt của ý chí độc lập và vai trò của phụ nữ trong lịch sử dân tộc.",
+      "Cuộc khởi nghĩa Hai Bà Trưng (năm 40 CN) là cuộc khởi nghĩa đầu tiên giành lại độc lập sau hơn 200 năm Bắc thuộc lần đầu. Trưng Trắc và Trưng Nhị lãnh đạo nghĩa quân đánh đuổi thái thú Tô Định, giải phóng 65 thành trì, lập ra nhà nước tự chủ kéo dài 3 năm. Cuộc khởi nghĩa là biểu tượng bất diệt của ý chí độc lập và vai trò của phụ nữ trong lịch sử dân tộc.",
     sections: [
       {
         heading: "Nguyên nhân khởi nghĩa",
@@ -406,7 +406,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
     category: "Thời kỳ Bắc thuộc",
     readTime: 15,
     overview:
-      "Thời kỳ Bắc thuộc kéo dài hơn 1000 năm (179 TCN – 938 CN) là giai đoạn thử thách khắc nghi��t nhất trong lịch sử dân tộc Việt Nam. Dù bị đô hộ bởi nhiều triều đại phong kiến phương Bắc (Hán, Đường, Tùy...), người Việt không ngừng đấu tranh, gìn giữ bản sắc dân tộc và liên tiếp nổi dậy giành lại độc lập. Chiến thắng Bạch Đằng năm 938 của Ngô Quyền chính thức kết thúc thời kỳ này.",
+      "Thời kỳ Bắc thuộc kéo dài hơn 1000 năm (179 TCN – 938 CN) là giai đoạn thử thách khắc nghiệt nhất trong lịch sử dân tộc Việt Nam. Dù bị đô hộ bởi nhiều triều đại phong kiến phương Bắc (Hán, Đường, Tùy...), người Việt không ngừng đấu tranh, gìn giữ bản sắc dân tộc và liên tiếp nổi dậy giành lại độc lập. Chiến thắng Bạch Đằng năm 938 của Ngô Quyền chính thức kết thúc thời kỳ này.",
     sections: [
       {
         heading: "Chính sách cai trị của các triều đại phương Bắc",
@@ -430,7 +430,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
       },
     ],
     keyFigures: [
-      { name: "Hai Bà Trưng", role: "L��nh đạo khởi nghĩa đầu tiên (40 CN)", years: "? – 43 CN" },
+      { name: "Hai Bà Trưng", role: "Lãnh đạo khởi nghĩa đầu tiên (40 CN)", years: "? – 43 CN" },
       { name: "Bà Triệu (Triệu Thị Trinh)", role: "Anh hùng dân tộc, lãnh đạo khởi nghĩa 248", years: "226–248 CN" },
       { name: "Lý Bí (Lý Nam Đế)", role: "Lập nước Vạn Xuân, triều Lý tiền Lý", years: "503–548 CN" },
       { name: "Ngô Quyền", role: "Chiến thắng Bạch Đằng, chấm dứt Bắc thuộc", years: "898–944 CN" },
@@ -530,7 +530,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
       {
         heading: "Nhật đảo chính Pháp và thời cơ vàng",
         body:
-          "Ngày 9/3/1945, Nhật đảo chính Pháp trên toàn Đông Dương trong một đêm, đập tan huyền thoại 'bất khả chiến bại' của Pháp. Đảng Cộng sản Đông Dư��ng nhanh chóng ra Chỉ thị 'Nhật – Pháp bắn nhau và hành động của chúng ta', xác định Nhật là kẻ thù chính và chuẩn bị tổng khởi nghĩa.",
+          "Ngày 9/3/1945, Nhật đảo chính Pháp trên toàn Đông Dương trong một đêm, đập tan huyền thoại 'bất khả chiến bại' của Pháp. Đảng Cộng sản Đông Dương nhanh chóng ra Chỉ thị 'Nhật – Pháp bắn nhau và hành động của chúng ta', xác định Nhật là kẻ thù chính và chuẩn bị tổng khởi nghĩa.",
       },
       {
         heading: "Tổng khởi nghĩa và thắng lợi trong 2 tuần",
@@ -559,7 +559,7 @@ export const LESSON_CONTENTS: LessonContent[] = [
       { year: "2/9/1945", event: "Hồ Chí Minh đọc Tuyên ngôn Độc lập tại Ba Đình" },
     ],
     significance:
-      "Cách mạng tháng Tám 1945 là sự kiện vĩ đại nhất trong lịch sử dân tộc Việt Nam thế kỷ XX: lật đổ ách thực dân gần 90 năm của Pháp và ách phát x��t Nhật, kết thúc chế độ quân chủ hàng nghìn năm, khai sinh nhà nước công nông đầu tiên ở Đông Nam Á. Thắng lợi này là điều kiện tiên quyết cho mọi thắng lợi về sau.",
+      "Cách mạng tháng Tám 1945 là sự kiện vĩ đại nhất trong lịch sử dân tộc Việt Nam thế kỷ XX: lật đổ ách thực dân gần 90 năm của Pháp và ách phát xít Nhật, kết thúc chế độ quân chủ hàng nghìn năm, khai sinh nhà nước công nông đầu tiên ở Đông Nam Á. Thắng lợi này là điều kiện tiên quyết cho mọi thắng lợi về sau.",
     suggestedQuestions: [
       "Tại sao Cách mạng tháng Tám thành công nhanh chóng như vậy?",
       "Tuyên ngôn Độc lập 2/9/1945 có nội dung chính là gì?",

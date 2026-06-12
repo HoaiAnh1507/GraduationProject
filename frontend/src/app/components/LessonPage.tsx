@@ -18,7 +18,7 @@ function parseMarkdown(text: string): string {
 export function LessonPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const navigate = useNavigate();
-  const { createConversation } = useApp();
+  const { setActiveConversationId } = useApp();
 
   const lesson = LESSON_CONTENTS.find((l) => l.id === topicId);
   const [activeSection, setActiveSection] = useState<string>("overview");
@@ -58,8 +58,8 @@ export function LessonPage() {
     setIsChatLoading(false);
   };
 
-  const handleOpenFullChat = async () => {
-    await createConversation(lesson.title);
+  const handleOpenFullChat = () => {
+    setActiveConversationId(null);
     navigate("/chat");
   };
 

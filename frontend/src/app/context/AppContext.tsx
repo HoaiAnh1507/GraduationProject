@@ -1,10 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Conversation, FlashcardDeck, Flashcard, Message } from "../types";
 import { INITIAL_FLASHCARD_DECKS } from "../mockData";
 import { backendApi, ConversationSummary } from "../api/backendApi";
 import { useAuth } from "./AuthContext";
 
 const GUEST_PREFIX = "guest_";
+const OPEN_NEW_CHAT_AFTER_LOGIN = "open-new-chat-after-login";
 
 const parseServerId = (id: string): number | null => {
   const n = Number(id);
@@ -34,11 +35,6 @@ const mapConversationSummaries = (rows: ConversationSummary[]): Conversation[] =
     };
   });
 
-const toImportableHistory = (messages: Message[]) =>
-  messages
-    .filter((m) => (m.role === "user" || m.role === "assistant") && !m.isError && m.content.trim())
-    .map((m) => ({ role: m.role, content: m.content }));
-
 interface AppContextValue {
   conversations: Conversation[];
   setConversations: React.Dispatch<React.SetStateAction<Conversation[]>>;
@@ -61,10 +57,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [flashcardDecks, setFlashcardDecks] = useState<FlashcardDeck[]>(INITIAL_FLASHCARD_DECKS);
-  const importingGuestRef = useRef(false);
 
   useEffect(() => {
-    if (authLoading || importingGuestRef.current) return;
+    if (authLoading) return;
 
     let active = true;
 
@@ -72,59 +67,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const rows = await backendApi.listConversations();
       if (!active) return;
       const serverConvs = mapConversationSummaries(rows);
+      if (sessionStorage.getItem(OPEN_NEW_CHAT_AFTER_LOGIN) === "1") {
+        sessionStorage.removeItem(OPEN_NEW_CHAT_AFTER_LOGIN);
+        setConversations(serverConvs);
+        setActiveConversationId(null);
+        return;
+      }
       setConversations(serverConvs);
-      setActiveConversationId(serverConvs[0]?.id ?? null);
+      setActiveConversationId(null);
     };
 
     if (!user) {
-      setConversations((prev) => {
-        const guest = prev.find((c) => isGuestConversationId(c.id));
-        return guest ? [guest] : [makeGuestConversation()];
-      });
-      setActiveConversationId((prev) => (isGuestConversationId(prev) ? prev : null));
-      return () => {
-        active = false;
-      };
-    }
-
-    const guestConversation = conversations.find((c) => isGuestConversationId(c.id));
-    const guestHistory = guestConversation ? toImportableHistory(guestConversation.messages) : [];
-
-    if (guestConversation && guestHistory.length > 0) {
-      importingGuestRef.current = true;
-      backendApi
-        .importGuestConversation({
-          title: guestConversation.title,
-          history: guestHistory,
-        })
-        .then(async (imported) => {
-          const rows = await backendApi.listConversations();
-          return { imported, rows };
-        })
-        .then(({ imported, rows }) => {
-          if (!active) return;
-          const importedId = String(imported.id);
-          const serverConvs = mapConversationSummaries(rows);
-          const preservedImported: Conversation = {
-            ...guestConversation,
-            id: importedId,
-            title: imported.title || guestConversation.title,
-            timestamp: new Date(imported.updatedAt || imported.createdAt),
-          };
-          const others = serverConvs.filter((c) => c.id !== importedId);
-          setConversations([preservedImported, ...others]);
-          setActiveConversationId(importedId);
-        })
-        .catch(() => {
-          if (active) {
-            loadUserConversations().catch(() => {
-              // Keep current in-memory state if backend is not ready.
-            });
-          }
-        })
-        .finally(() => {
-          importingGuestRef.current = false;
-        });
+      setConversations([]);
+      setActiveConversationId(null);
       return () => {
         active = false;
       };

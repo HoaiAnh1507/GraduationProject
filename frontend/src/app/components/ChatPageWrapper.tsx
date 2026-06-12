@@ -8,18 +8,11 @@ export function ChatPageWrapper() {
     conversations,
     setConversations,
     activeConversationId,
-    setActiveConversationId,
     createConversation,
     updateConversationTitle,
     loadConversationMessages,
   } = useApp();
   const loadedConversationIds = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!activeConversationId && conversations.length > 0) {
-      setActiveConversationId(conversations[0].id);
-    }
-  }, [activeConversationId, conversations, setActiveConversationId]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -49,11 +42,15 @@ export function ChatPageWrapper() {
 
   const activeConversation =
     conversations.find((c) => c.id === activeConversationId) ??
-    conversations[0] ??
     null;
 
   const handleUpdateConversation = (updated: Conversation) => {
-    setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setConversations((prev) => {
+      const existing = prev.some((c) => c.id === updated.id);
+      return existing
+        ? prev.map((c) => (c.id === updated.id ? updated : c))
+        : [updated, ...prev];
+    });
     const existing = conversations.find((c) => c.id === updated.id);
     if (existing && existing.title !== updated.title) {
       updateConversationTitle(updated.id, updated.title);

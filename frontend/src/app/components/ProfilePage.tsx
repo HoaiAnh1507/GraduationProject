@@ -7,6 +7,7 @@ import {
 import { motion } from "motion/react";
 import { useAuth } from "../context/AuthContext";
 import { useApp } from "../context/AppContext";
+import { AuthRequired } from "./AuthRequired";
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -33,6 +34,10 @@ export function ProfilePage() {
     setEditMode(false);
     // In a real app, persist changes via API
   };
+
+  if (!user) {
+    return <AuthRequired />;
+  }
 
   return (
     <div

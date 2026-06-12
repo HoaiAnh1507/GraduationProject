@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { BookOpen, Mail, Lock, User, Eye, EyeOff, Chrome, ArrowRight, Loader2, Sun, Moon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
@@ -9,10 +9,11 @@ type Tab = "login" | "register";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { loginWithGoogle, loginWithEmail, register, isLoading } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
-  const [tab, setTab] = useState<Tab>("login");
+  const [tab, setTab] = useState<Tab>(searchParams.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

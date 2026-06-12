@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from "react-router";
 import {
   Plus, MessageSquare, Clock, ChevronLeft, ChevronRight,
   BookOpen, Home, GraduationCap, Sun, Moon,
-  User, Settings, LogOut, ChevronUp, Globe, Library, PencilLine, Trash2,
+  User, Settings, LogOut, ChevronUp, Globe, Library, PencilLine, Trash2, LogIn,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Conversation } from "../types";
 import { useApp } from "../context/AppContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { AuthRequiredModal } from "./AuthRequiredModal";
 
 function formatTime(date: Date): string {
   const now = new Date();
@@ -31,6 +32,7 @@ interface SidebarProps {
 export function Sidebar(_props: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [editingConvId, setEditingConvId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -41,7 +43,6 @@ export function Sidebar(_props: SidebarProps) {
     conversations,
     activeConversationId,
     setActiveConversationId,
-    createConversation,
     updateConversationTitle,
     deleteConversation,
   } = useApp();
@@ -52,7 +53,6 @@ export function Sidebar(_props: SidebarProps) {
   const isStudyMaterials = location.pathname.startsWith("/study-materials") || location.pathname.startsWith("/lesson");
   const isFlashcards = location.pathname.startsWith("/flashcards") || location.pathname.startsWith("/study/");
 
-  // Close menu on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -70,8 +70,11 @@ export function Sidebar(_props: SidebarProps) {
   ];
 
   const handleNew = async () => {
-    const id = await createConversation("Hội thoại mới");
-    setActiveConversationId(id);
+    if (!user) {
+      setAuthPromptOpen(true);
+      return;
+    }
+    setActiveConversationId(null);
     navigate("/chat");
   };
 
@@ -114,7 +117,6 @@ export function Sidebar(_props: SidebarProps) {
         borderRight: "1px solid var(--t-sidebar-border)",
       }}
     >
-      {/* ── Header ── */}
       <div
         className="flex items-center gap-3 p-4 border-b"
         style={{ borderColor: "var(--t-sidebar-border)" }}
@@ -149,7 +151,6 @@ export function Sidebar(_props: SidebarProps) {
           </div>
         )}
 
-        {/* Theme toggle */}
         {!collapsed && (
           <button
             onClick={toggleTheme}
@@ -170,7 +171,6 @@ export function Sidebar(_props: SidebarProps) {
         </button>
       </div>
 
-      {/* ── Primary nav ── */}
       <div className="px-2 py-3 space-y-1">
         {navItems.map(({ id, icon: Icon, label, path }) => {
           const active =
@@ -180,7 +180,13 @@ export function Sidebar(_props: SidebarProps) {
           return (
             <button
               key={id}
-              onClick={() => navigate(path)}
+              onClick={() => {
+                if (id !== "home" && !user) {
+                  setAuthPromptOpen(true);
+                  return;
+                }
+                navigate(path);
+              }}
               className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all"
               style={{
                 background: active ? "var(--t-gold-bg)" : "transparent",
@@ -206,7 +212,6 @@ export function Sidebar(_props: SidebarProps) {
         })}
       </div>
 
-      {/* ── New Chat Button ── */}
       <div className="px-3 pb-2">
         <button
           onClick={handleNew}
@@ -219,7 +224,6 @@ export function Sidebar(_props: SidebarProps) {
         </button>
       </div>
 
-      {/* ── Conversation history ── */}
       <AnimatePresence>
         {!collapsed && (
           <motion.div
@@ -236,7 +240,7 @@ export function Sidebar(_props: SidebarProps) {
               <Clock size={11} className="inline mr-1.5" />
               Lịch sử hội thoại
             </p>
-            {conversations.map((conv) => {
+            {user ? conversations.map((conv) => {
               const isActive = activeConversationId === conv.id && location.pathname === "/chat";
               return (
                 <div key={conv.id} className="relative group">
@@ -318,21 +322,25 @@ export function Sidebar(_props: SidebarProps) {
                   </button>
                 </div>
               );
-            })}
+            }) : (
+              <div
+                className="mx-2 mt-2 rounded-lg px-3 py-3 text-xs leading-relaxed"
+                style={{ background: "var(--t-card-bg)", border: "1px solid var(--t-card-border)", color: "var(--t-text-4)" }}
+              >
+                Đăng nhập để lưu và xem lịch sử hội thoại.
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Spacer when collapsed */}
       {collapsed && <div className="flex-1" />}
 
-      {/* ── User profile footer ── */}
       <div
         className="relative border-t"
         style={{ borderColor: "var(--t-sidebar-border)" }}
         ref={menuRef}
       >
-        {/* User menu popup */}
         <AnimatePresence>
           {menuOpen && user && (
             <motion.div
@@ -351,7 +359,6 @@ export function Sidebar(_props: SidebarProps) {
                   : "0 -8px 32px rgba(0,0,0,0.12)",
               }}
             >
-              {/* User info header */}
               <div
                 className="px-4 py-3"
                 style={{ borderBottom: "1px solid var(--t-divider)" }}
@@ -364,7 +371,6 @@ export function Sidebar(_props: SidebarProps) {
                 </p>
               </div>
 
-              {/* Menu items */}
               {[
                 { icon: User, label: "Hồ sơ cá nhân", action: () => { navigate("/profile"); setMenuOpen(false); } },
                 { icon: Settings, label: "Cài đặt", action: () => { navigate("/settings"); setMenuOpen(false); } },
@@ -391,10 +397,8 @@ export function Sidebar(_props: SidebarProps) {
                 </button>
               ))}
 
-              {/* Divider */}
               <div className="h-px mx-3" style={{ background: "var(--t-divider)" }} />
 
-              {/* Logout */}
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all"
@@ -409,48 +413,59 @@ export function Sidebar(_props: SidebarProps) {
           )}
         </AnimatePresence>
 
-        {/* Profile button */}
-        <button
-          onClick={() => (user ? setMenuOpen(!menuOpen) : navigate("/login"))}
-          className="w-full flex items-center gap-2.5 p-3.5 transition-all hover:opacity-80"
-          title={collapsed ? (user?.name ?? "Dang nhap") : undefined}
-        >
-          {/* Avatar */}
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs flex-shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #c9a84c, #a87c2a)",
-              color: "white",
-            }}
+        {user ? (
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="w-full flex items-center gap-2.5 p-3.5 transition-all hover:opacity-80"
+            title={collapsed ? (user?.name ?? "Đăng nhập") : undefined}
           >
-            {user?.initials ?? "G"}
-          </div>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs flex-shrink-0"
+              style={{
+                background: "linear-gradient(135deg, #c9a84c, #a87c2a)",
+                color: "white",
+              }}
+            >
+              {user.initials}
+            </div>
 
-          {!collapsed && (
-            <>
-              <div className="min-w-0 flex-1 text-left">
-                <p className="text-sm truncate" style={{ color: "var(--t-text-1)" }}>
-                  {user?.name ?? "Guest"}
-                </p>
-                <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                  <p className="text-xs" style={{ color: "var(--t-text-4)" }}>
-                    Đang hoạt động
+            {!collapsed && (
+              <>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-sm truncate" style={{ color: "var(--t-text-1)" }}>
+                    {user?.name ?? "Đăng nhập"}
                   </p>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: user ? "#4ade80" : "var(--t-gold)" }} />
+                    <p className="text-xs" style={{ color: "var(--t-text-4)" }}>
+                      Đang hoạt động
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ChevronUp
-                size={13}
-                className="flex-shrink-0 transition-transform"
-                style={{
-                  color: "var(--t-text-4)",
-                  transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
-                }}
-              />
-            </>
-          )}
-        </button>
+                {user && <ChevronUp
+                  size={13}
+                  className="flex-shrink-0 transition-transform"
+                  style={{
+                    color: "var(--t-text-4)",
+                    transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  }}
+                />}
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate("/login")}
+            className="m-3 w-[calc(100%-1.5rem)] flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{ background: "linear-gradient(135deg, #c9a84c, #a87c2a)", color: "white" }}
+            title={collapsed ? "Đăng nhập" : undefined}
+          >
+            <LogIn size={15} />
+            {!collapsed && <span>Đăng nhập</span>}
+          </button>
+        )}
       </div>
+      <AuthRequiredModal open={authPromptOpen} onClose={() => setAuthPromptOpen(false)} />
     </motion.aside>
   );
 }

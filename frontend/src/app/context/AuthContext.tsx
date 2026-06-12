@@ -20,6 +20,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const OPEN_NEW_CHAT_AFTER_LOGIN = "open-new-chat-after-login";
 
 function getInitials(name: string): string {
   return name
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const resp = await backendApi.login({ email, password });
+      sessionStorage.setItem(OPEN_NEW_CHAT_AFTER_LOGIN, "1");
       const displayName = resp.displayName || email.split("@")[0];
       persist({
         id: resp.userId,
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const resp = await backendApi.register({ email, password, displayName: name });
+      sessionStorage.setItem(OPEN_NEW_CHAT_AFTER_LOGIN, "1");
       const displayName = resp.displayName || name || email.split("@")[0];
       persist({
         id: resp.userId,
