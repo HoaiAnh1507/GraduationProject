@@ -49,7 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async (): Promise<void> => {
-    throw new Error("Google login is not wired yet");
+    sessionStorage.setItem(OPEN_NEW_CHAT_AFTER_LOGIN, "1");
+    window.location.assign("/oauth2/authorization/google");
+    return new Promise(() => {});
   };
 
   const loginWithEmail = async (email: string, password: string): Promise<void> => {

@@ -7,14 +7,12 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import vn.history.backend.dto.documents.DocumentDetailDto;
 import vn.history.backend.dto.documents.DocumentSummaryDto;
 import vn.history.backend.exception.NotFoundException;
@@ -24,6 +22,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,43 +84,52 @@ public class DocumentsService {
         );
     }
 
-    public ResponseEntity<?> streamPdf(long documentId, HttpHeaders requestHeaders) {
+    public ResponseEntity<StreamingResponseBody> streamPdf(long documentId, HttpHeaders requestHeaders) {
         var row = documentsRepository.findById(documentId)
                 .orElseThrow(() -> new NotFoundException("Document not found: " + documentId));
 
         Path pdfPath = resolvePdfPath(row.sourceFile());
-        Resource resource = new FileSystemResource(pdfPath);
-
-        long contentLength;
+        long fileLength;
         try {
-            contentLength = resource.contentLength();
+            fileLength = Files.size(pdfPath);
         } catch (IOException e) {
-            throw new IllegalStateException("Cannot read PDF content length", e);
+            throw new NotFoundException("PDF not found on disk");
         }
 
         List<HttpRange> ranges = requestHeaders.getRange();
         String contentDisposition = contentDispositionHeader(row.sourceFile());
         if (ranges == null || ranges.isEmpty()) {
+            StreamingResponseBody body = outputStream -> Files.copy(pdfPath, outputStream);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-                    .contentLength(contentLength)
-                    .body(resource);
+                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                    .contentLength(fileLength)
+                    .body(body);
         }
 
         HttpRange range = ranges.getFirst();
-        long start = range.getRangeStart(contentLength);
-        long end = range.getRangeEnd(contentLength);
+        long start = range.getRangeStart(fileLength);
+        long end = Math.min(range.getRangeEnd(fileLength), fileLength - 1);
+        if (start >= fileLength || start > end) {
+            return ResponseEntity.status(416)
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLength)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                    .build();
+        }
+
         long rangeLength = Math.max(0, end - start + 1);
 
-        ResourceRegion region = new ResourceRegion(resource, start, rangeLength);
+        StreamingResponseBody body = outputStream -> copyRange(pdfPath, outputStream, start, rangeLength);
         return ResponseEntity.status(206)
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileLength)
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
                 .contentLength(rangeLength)
-                .body(region);
+                .body(body);
     }
 
     public byte[] renderPageImage(long documentId, int pageNumber) {
@@ -194,6 +203,22 @@ public class DocumentsService {
         } catch (Exception e) {
             // Keep API resilient even if metadata is malformed.
             return objectMapper.createObjectNode();
+        }
+    }
+
+    private void copyRange(Path path, OutputStream outputStream, long start, long length) throws IOException {
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            inputStream.skipNBytes(start);
+            byte[] buffer = new byte[8192];
+            long remaining = length;
+            while (remaining > 0) {
+                int read = inputStream.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (read < 0) {
+                    break;
+                }
+                outputStream.write(buffer, 0, read);
+                remaining -= read;
+            }
         }
     }
 

@@ -11,6 +11,7 @@ import vn.history.backend.exception.ConflictException;
 import vn.history.backend.exception.UnauthorizedException;
 import vn.history.backend.repository.LocalCredentialsRepository;
 import vn.history.backend.repository.RefreshTokensRepository;
+import vn.history.backend.repository.UserIdentitiesRepository;
 import vn.history.backend.repository.UsersRepository;
 
 import java.security.SecureRandom;
@@ -26,6 +27,7 @@ public class AuthService {
     private final UsersRepository usersRepository;
     private final LocalCredentialsRepository localCredentialsRepository;
     private final RefreshTokensRepository refreshTokensRepository;
+    private final UserIdentitiesRepository userIdentitiesRepository;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
     private final BCryptPasswordEncoder passwordEncoder;
@@ -40,6 +42,7 @@ public class AuthService {
             UsersRepository usersRepository,
             LocalCredentialsRepository localCredentialsRepository,
             RefreshTokensRepository refreshTokensRepository,
+            UserIdentitiesRepository userIdentitiesRepository,
             JwtService jwtService,
             TokenBlacklistService tokenBlacklistService,
             @Value("${app.auth.access-token-minutes:15}") long accessTokenMinutes,
@@ -49,6 +52,7 @@ public class AuthService {
         this.usersRepository = usersRepository;
         this.localCredentialsRepository = localCredentialsRepository;
         this.refreshTokensRepository = refreshTokensRepository;
+        this.userIdentitiesRepository = userIdentitiesRepository;
         this.jwtService = jwtService;
         this.tokenBlacklistService = tokenBlacklistService;
         this.passwordEncoder = new BCryptPasswordEncoder();
@@ -90,6 +94,33 @@ public class AuthService {
         }
 
         return issueTokens(user, userAgent, ip);
+    }
+
+    public AuthResult loginWithGoogle(GoogleProfile profile, String userAgent, String ip) {
+        if (profile == null || isBlank(profile.subject())) {
+            throw new UnauthorizedException("Google account is missing subject");
+        }
+        if (isBlank(profile.email())) {
+            throw new UnauthorizedException("Google account is missing email");
+        }
+        if (!profile.emailVerified()) {
+            throw new UnauthorizedException("Google email is not verified");
+        }
+
+        String email = profile.email().trim();
+        UsersRepository.UserRow user = userIdentitiesRepository.findGoogleBySubject(profile.subject().trim())
+                .flatMap(identity -> usersRepository.findById(identity.userId()))
+                .orElseGet(() -> findOrCreateGoogleUser(email, profile));
+
+        try {
+            userIdentitiesRepository.linkGoogleIdentity(user.id(), profile.subject().trim(), email);
+        } catch (DuplicateKeyException e) {
+            throw new ConflictException("This user already has a different Google identity linked");
+        }
+
+        usersRepository.updateGoogleProfile(user.id(), profile.displayName(), profile.avatarUrl(), true);
+        var updatedUser = usersRepository.findById(user.id()).orElse(user);
+        return issueTokens(updatedUser, userAgent, ip);
     }
 
     public AuthResult refresh(String refreshToken, String userAgent, String ip) {
@@ -146,12 +177,46 @@ public class AuthService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    private UsersRepository.UserRow findOrCreateGoogleUser(String email, GoogleProfile profile) {
+        var existingUser = usersRepository.findByEmail(email);
+        if (existingUser.isPresent()) {
+            return existingUser.get();
+        }
+
+        try {
+            long userId = usersRepository.insertGoogleUser(
+                    email,
+                    profile.displayName(),
+                    profile.avatarUrl(),
+                    true
+            );
+            return usersRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalStateException("User not found after Google insert"));
+        } catch (DuplicateKeyException e) {
+            return usersRepository.findByEmail(email)
+                    .orElseThrow(() -> new ConflictException("Email already registered"));
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     public record AuthResult(
             AuthResponse response,
             String accessToken,
             String refreshToken,
             Instant accessExpiresAt,
             Instant refreshExpiresAt
+    ) {
+    }
+
+    public record GoogleProfile(
+            String subject,
+            String email,
+            String displayName,
+            String avatarUrl,
+            boolean emailVerified
     ) {
     }
 }

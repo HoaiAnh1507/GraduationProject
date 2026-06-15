@@ -2,6 +2,7 @@ package vn.history.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,6 +14,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import vn.history.backend.security.GoogleOAuth2AuthenticationFailureHandler;
+import vn.history.backend.security.GoogleOAuth2AuthenticationSuccessHandler;
 import vn.history.backend.security.JwtCookieAuthenticationFilter;
 import vn.history.backend.security.RefreshTokenCookieAuthenticationFilter;
 
@@ -34,18 +37,24 @@ public class SecurityConfig {
             HttpSecurity http,
             JwtCookieAuthenticationFilter jwtCookieAuthenticationFilter,
             RefreshTokenCookieAuthenticationFilter refreshTokenCookieAuthenticationFilter,
+            GoogleOAuth2AuthenticationSuccessHandler googleOAuth2AuthenticationSuccessHandler,
+            GoogleOAuth2AuthenticationFailureHandler googleOAuth2AuthenticationFailureHandler,
+            @Value("${app.auth.google.enabled:false}") boolean googleOAuth2Enabled,
             ObjectMapper objectMapper
     ) throws Exception {
-        return http
+        http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(
+                        googleOAuth2Enabled ? SessionCreationPolicy.IF_REQUIRED : SessionCreationPolicy.STATELESS
+                ))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat/guest").permitAll()
                         .anyRequest().authenticated()
                 )
@@ -56,8 +65,16 @@ public class SecurityConfig {
                                 writeError(objectMapper, response, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Access denied"))
                 )
                 .addFilterBefore(jwtCookieAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(refreshTokenCookieAuthenticationFilter, JwtCookieAuthenticationFilter.class)
-                .build();
+                .addFilterAfter(refreshTokenCookieAuthenticationFilter, JwtCookieAuthenticationFilter.class);
+
+        if (googleOAuth2Enabled) {
+            http.oauth2Login(oauth2 -> oauth2
+                    .successHandler(googleOAuth2AuthenticationSuccessHandler)
+                    .failureHandler(googleOAuth2AuthenticationFailureHandler)
+            );
+        }
+
+        return http.build();
     }
 
     private void writeError(

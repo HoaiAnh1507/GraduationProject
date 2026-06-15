@@ -66,6 +66,27 @@ public class UsersRepository {
         return jdbcTemplate.queryForObject(sql, Long.class, email, displayName, username);
     }
 
+    public long insertGoogleUser(String email, String displayName, String avatarUrl, boolean emailVerified) {
+        final String sql = """
+                INSERT INTO users (email, display_name, avatar_url, email_verified, last_login_at)
+                VALUES (?, ?, ?, ?, now())
+                RETURNING id
+                """;
+        return jdbcTemplate.queryForObject(sql, Long.class, email, displayName, avatarUrl, emailVerified);
+    }
+
+    public void updateGoogleProfile(long userId, String displayName, String avatarUrl, boolean emailVerified) {
+        final String sql = """
+                UPDATE users
+                SET display_name = COALESCE(NULLIF(?, ''), display_name),
+                    avatar_url = COALESCE(NULLIF(?, ''), avatar_url),
+                    email_verified = email_verified OR ?,
+                    last_login_at = now()
+                WHERE id = ?
+                """;
+        jdbcTemplate.update(sql, displayName, avatarUrl, emailVerified, userId);
+    }
+
     private static Instant toInstant(OffsetDateTime odt) {
         return odt == null ? null : odt.toInstant();
     }

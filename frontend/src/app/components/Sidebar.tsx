@@ -244,15 +244,25 @@ export function Sidebar(_props: SidebarProps) {
               const isActive = activeConversationId === conv.id && location.pathname === "/chat";
               return (
                 <div key={conv.id} className="relative group">
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       if (editingConvId === conv.id) return;
                       handleSelectConversation(conv.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (editingConvId === conv.id) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleSelectConversation(conv.id);
+                      }
                     }}
                     className="w-full text-left rounded-lg px-3 py-2.5 transition-all group"
                     style={{
                       background: isActive ? "var(--t-gold-bg)" : "transparent",
                       border: isActive ? "1px solid var(--t-gold-border)" : "1px solid transparent",
+                      cursor: "pointer",
                     }}
                   >
                     <div className="flex items-start gap-2">
@@ -319,7 +329,7 @@ export function Sidebar(_props: SidebarProps) {
                         </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 </div>
               );
             }) : (

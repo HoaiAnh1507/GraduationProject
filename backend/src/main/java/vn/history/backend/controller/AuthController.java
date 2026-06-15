@@ -2,9 +2,7 @@ package vn.history.backend.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,33 +14,25 @@ import vn.history.backend.dto.auth.LoginRequest;
 import vn.history.backend.dto.auth.RegisterRequest;
 import vn.history.backend.exception.UnauthorizedException;
 import vn.history.backend.service.LoginRateLimiter;
+import vn.history.backend.service.auth.AuthCookieService;
 import vn.history.backend.service.auth.AuthService;
-
-import java.time.Duration;
-import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private static final String ACCESS_COOKIE = "access_token";
-    private static final String REFRESH_COOKIE = "refresh_token";
-
     private final AuthService authService;
     private final LoginRateLimiter loginRateLimiter;
-    private final boolean cookieSecure;
-    private final String cookieSameSite;
+    private final AuthCookieService authCookieService;
 
     public AuthController(
             AuthService authService,
             LoginRateLimiter loginRateLimiter,
-            @Value("${app.auth.cookie-secure:false}") boolean cookieSecure,
-            @Value("${app.auth.cookie-same-site:Lax}") String cookieSameSite
+            AuthCookieService authCookieService
     ) {
         this.authService = authService;
         this.loginRateLimiter = loginRateLimiter;
-        this.cookieSecure = cookieSecure;
-        this.cookieSameSite = cookieSameSite;
+        this.authCookieService = authCookieService;
     }
 
     @PostMapping("/register")
@@ -73,7 +63,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
-            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshToken,
+            @CookieValue(value = AuthCookieService.REFRESH_COOKIE, required = false) String refreshToken,
             HttpServletRequest httpReq
     ) {
         var result = authService.refresh(refreshToken, userAgent(httpReq), clientIp(httpReq));
@@ -82,56 +72,19 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
-            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshToken,
-            @CookieValue(value = ACCESS_COOKIE, required = false) String accessToken
+            @CookieValue(value = AuthCookieService.REFRESH_COOKIE, required = false) String refreshToken,
+            @CookieValue(value = AuthCookieService.ACCESS_COOKIE, required = false) String accessToken
     ) {
         authService.logout(refreshToken, accessToken);
-        return ResponseEntity.noContent()
-            .header(HttpHeaders.SET_COOKIE, clearCookie(ACCESS_COOKIE, "/"))
-            .header(HttpHeaders.SET_COOKIE, clearCookie(REFRESH_COOKIE, "/api/auth"))
-                .build();
+        ResponseEntity.HeadersBuilder<?> builder = ResponseEntity.noContent();
+        authCookieService.clearCookies().forEach(cookie -> builder.header(HttpHeaders.SET_COOKIE, cookie));
+        return builder.build();
     }
 
     private ResponseEntity<AuthResponse> withCookies(AuthService.AuthResult result, ResponseEntity<AuthResponse> response) {
-        return ResponseEntity.status(response.getStatusCode())
-                .header(HttpHeaders.SET_COOKIE, accessCookie(result.accessToken(), result.accessExpiresAt()))
-                .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken(), result.refreshExpiresAt()))
-                .body(response.getBody());
-    }
-
-    private String accessCookie(String token, Instant expiresAt) {
-        Duration maxAge = maxAgeFrom(expiresAt);
-        return ResponseCookie.from(ACCESS_COOKIE, token)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/")
-                .sameSite(cookieSameSite)
-                .maxAge(maxAge)
-                .build()
-                .toString();
-    }
-
-    private String refreshCookie(String token, Instant expiresAt) {
-        Duration maxAge = maxAgeFrom(expiresAt);
-        return ResponseCookie.from(REFRESH_COOKIE, token)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/auth")
-                .sameSite(cookieSameSite)
-                .maxAge(maxAge)
-                .build()
-                .toString();
-    }
-
-    private String clearCookie(String name, String path) {
-        return ResponseCookie.from(name, "")
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path(path)
-                .sameSite(cookieSameSite)
-                .maxAge(0)
-                .build()
-                .toString();
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.getStatusCode());
+        authCookieService.authCookies(result).forEach(cookie -> builder.header(HttpHeaders.SET_COOKIE, cookie));
+        return builder.body(response.getBody());
     }
 
     private String userAgent(HttpServletRequest req) {
@@ -151,11 +104,4 @@ public class AuthController {
         return req.getRemoteAddr();
     }
 
-    private Duration maxAgeFrom(Instant expiresAt) {
-        Instant now = Instant.now();
-        if (expiresAt == null || expiresAt.isBefore(now)) {
-            return Duration.ZERO;
-        }
-        return Duration.between(now, expiresAt);
-    }
 }
