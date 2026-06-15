@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -44,6 +45,7 @@ public class JwtService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sub", String.valueOf(userId));
         payload.put("email", email);
+        payload.put("jti", UUID.randomUUID().toString());
         payload.put("iss", issuer);
         payload.put("iat", now.getEpochSecond());
         payload.put("exp", expiresAt.getEpochSecond());
@@ -79,6 +81,7 @@ public class JwtService {
         Object sub = payload.get("sub");
         Object email = payload.get("email");
         Object exp = payload.get("exp");
+        Object jti = payload.get("jti");
 
         if (typ == null || !"access".equals(typ.toString())) {
             throw new IllegalStateException("Invalid access token type");
@@ -100,7 +103,8 @@ public class JwtService {
 
         long userId = Long.parseLong(sub.toString());
         String emailStr = email == null ? null : email.toString();
-        return new AccessTokenClaims(userId, emailStr, Instant.ofEpochSecond(expEpoch));
+        String jtiStr = jti == null ? null : jti.toString();
+        return new AccessTokenClaims(userId, emailStr, Instant.ofEpochSecond(expEpoch), jtiStr);
     }
 
     private byte[] jsonBytes(Map<String, Object> data) {
@@ -144,6 +148,6 @@ public class JwtService {
         return result == 0;
     }
 
-    public record AccessTokenClaims(long userId, String email, Instant expiresAt) {
+    public record AccessTokenClaims(long userId, String email, Instant expiresAt, String jti) {
     }
 }

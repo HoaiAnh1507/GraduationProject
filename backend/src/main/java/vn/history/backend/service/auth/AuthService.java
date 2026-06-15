@@ -27,6 +27,7 @@ public class AuthService {
     private final LocalCredentialsRepository localCredentialsRepository;
     private final RefreshTokensRepository refreshTokensRepository;
     private final JwtService jwtService;
+    private final TokenBlacklistService tokenBlacklistService;
     private final BCryptPasswordEncoder passwordEncoder;
 
     private final Duration accessTokenTtl;
@@ -40,6 +41,7 @@ public class AuthService {
             LocalCredentialsRepository localCredentialsRepository,
             RefreshTokensRepository refreshTokensRepository,
             JwtService jwtService,
+            TokenBlacklistService tokenBlacklistService,
             @Value("${app.auth.access-token-minutes:15}") long accessTokenMinutes,
                 @Value("${app.auth.refresh-token-days:7}") long refreshTokenDays,
                 @Value("${APP_DB_TIMEZONE:Asia/Ho_Chi_Minh}") String timeZoneId
@@ -48,6 +50,7 @@ public class AuthService {
         this.localCredentialsRepository = localCredentialsRepository;
         this.refreshTokensRepository = refreshTokensRepository;
         this.jwtService = jwtService;
+        this.tokenBlacklistService = tokenBlacklistService;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.accessTokenTtl = Duration.ofMinutes(accessTokenMinutes);
         this.refreshTokenTtl = Duration.ofDays(refreshTokenDays);
@@ -107,13 +110,14 @@ public class AuthService {
         return issueTokens(user, userAgent, ip);
     }
 
-    public void logout(String refreshToken) {
-        if (refreshToken == null || refreshToken.isBlank()) {
-            return;
+    public void logout(String refreshToken, String accessToken) {
+        tokenBlacklistService.blacklistAccessToken(accessToken);
+
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            String tokenHash = TokenHasher.sha256Hex(refreshToken);
+            refreshTokensRepository.findValidByHash(tokenHash)
+                    .ifPresent(row -> refreshTokensRepository.revoke(row.id()));
         }
-        String tokenHash = TokenHasher.sha256Hex(refreshToken);
-        refreshTokensRepository.findValidByHash(tokenHash)
-                .ifPresent(row -> refreshTokensRepository.revoke(row.id()));
     }
 
     private AuthResult issueTokens(UsersRepository.UserRow user, String userAgent, String ip) {

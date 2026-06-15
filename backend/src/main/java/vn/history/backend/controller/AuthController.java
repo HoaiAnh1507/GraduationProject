@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import vn.history.backend.dto.auth.AuthResponse;
 import vn.history.backend.dto.auth.LoginRequest;
 import vn.history.backend.dto.auth.RegisterRequest;
+import vn.history.backend.exception.UnauthorizedException;
+import vn.history.backend.service.LoginRateLimiter;
 import vn.history.backend.service.auth.AuthService;
 
 import java.time.Duration;
@@ -27,15 +29,18 @@ public class AuthController {
     private static final String REFRESH_COOKIE = "refresh_token";
 
     private final AuthService authService;
+    private final LoginRateLimiter loginRateLimiter;
     private final boolean cookieSecure;
     private final String cookieSameSite;
 
     public AuthController(
             AuthService authService,
+            LoginRateLimiter loginRateLimiter,
             @Value("${app.auth.cookie-secure:false}") boolean cookieSecure,
             @Value("${app.auth.cookie-same-site:Lax}") String cookieSameSite
     ) {
         this.authService = authService;
+        this.loginRateLimiter = loginRateLimiter;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
     }
@@ -54,8 +59,16 @@ public class AuthController {
             @Valid @RequestBody LoginRequest req,
             HttpServletRequest httpReq
     ) {
-        var result = authService.login(req, userAgent(httpReq), clientIp(httpReq));
-        return withCookies(result, ResponseEntity.ok(result.response()));
+        String ip = clientIp(httpReq);
+        loginRateLimiter.assertAllowed(ip);
+        try {
+            var result = authService.login(req, userAgent(httpReq), ip);
+            loginRateLimiter.clear(ip);
+            return withCookies(result, ResponseEntity.ok(result.response()));
+        } catch (UnauthorizedException e) {
+            loginRateLimiter.recordFailure(ip);
+            throw e;
+        }
     }
 
     @PostMapping("/refresh")
@@ -69,9 +82,10 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
-            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshToken
+            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshToken,
+            @CookieValue(value = ACCESS_COOKIE, required = false) String accessToken
     ) {
-        authService.logout(refreshToken);
+        authService.logout(refreshToken, accessToken);
         return ResponseEntity.noContent()
             .header(HttpHeaders.SET_COOKIE, clearCookie(ACCESS_COOKIE, "/"))
             .header(HttpHeaders.SET_COOKIE, clearCookie(REFRESH_COOKIE, "/api/auth"))
@@ -125,6 +139,15 @@ public class AuthController {
     }
 
     private String clientIp(HttpServletRequest req) {
+        String forwardedFor = req.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            int comma = forwardedFor.indexOf(',');
+            return comma >= 0 ? forwardedFor.substring(0, comma).trim() : forwardedFor.trim();
+        }
+        String realIp = req.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
         return req.getRemoteAddr();
     }
 
