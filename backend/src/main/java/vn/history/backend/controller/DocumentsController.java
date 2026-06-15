@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import vn.history.backend.dto.documents.DocumentDetailDto;
 import vn.history.backend.dto.documents.DocumentSummaryDto;
 import vn.history.backend.service.DocumentsService;
@@ -35,7 +36,7 @@ public class DocumentsController {
     }
 
     @GetMapping("/{documentId}/pdf")
-    public ResponseEntity<?> getPdf(
+    public ResponseEntity<StreamingResponseBody> getPdf(
             @PathVariable long documentId,
             @RequestHeader HttpHeaders headers
     ) {

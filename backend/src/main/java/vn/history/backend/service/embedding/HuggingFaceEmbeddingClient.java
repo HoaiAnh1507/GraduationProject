@@ -28,19 +28,22 @@ public class HuggingFaceEmbeddingClient implements EmbeddingClient {
     private final String embeddingUrl;
     private final int embeddingDim;
     private final boolean waitForModel;
+    private final boolean normalizeEmbedding;
 
     public HuggingFaceEmbeddingClient(
             RestClient.Builder restClientBuilder,
             @Value("${app.hf.token:}") String token,
             @Value("${app.hf.embedding-url:}") String embeddingUrl,
             @Value("${app.hf.embedding-dim:1024}") int embeddingDim,
-            @Value("${app.hf.wait-for-model:true}") boolean waitForModel
+            @Value("${app.hf.wait-for-model:true}") boolean waitForModel,
+            @Value("${app.hf.normalize-embedding:true}") boolean normalizeEmbedding
     ) {
         this.restClient = restClientBuilder.build();
         this.token = token;
         this.embeddingUrl = embeddingUrl;
         this.embeddingDim = embeddingDim;
         this.waitForModel = waitForModel;
+        this.normalizeEmbedding = normalizeEmbedding;
     }
 
     @Override
@@ -88,7 +91,7 @@ public class HuggingFaceEmbeddingClient implements EmbeddingClient {
             if (embedding.size() != embeddingDim) {
                 throw new UpstreamServiceException("HuggingFace embedding dimension mismatch: expected " + embeddingDim + ", got " + embedding.size());
             }
-            return embedding;
+            return normalizeEmbedding ? l2Normalize(embedding) : embedding;
         } catch (UpstreamServiceException e) {
             throw e;
         } catch (RestClientResponseException e) {
@@ -199,6 +202,27 @@ public class HuggingFaceEmbeddingClient implements EmbeddingClient {
         List<Double> out = new ArrayList<>(dim);
         for (int i = 0; i < dim; i++) {
             out.add(sum[i] / tokenCount);
+        }
+        return out;
+    }
+
+    private List<Double> l2Normalize(List<Double> embedding) {
+        double normSquared = 0.0d;
+        for (Double value : embedding) {
+            if (value == null || !Double.isFinite(value)) {
+                throw new UpstreamServiceException("HuggingFace embedding contains non-finite value");
+            }
+            normSquared += value * value;
+        }
+
+        double norm = Math.sqrt(normSquared);
+        if (norm == 0.0d) {
+            throw new UpstreamServiceException("HuggingFace embedding norm is zero");
+        }
+
+        List<Double> out = new ArrayList<>(embedding.size());
+        for (Double value : embedding) {
+            out.add(value / norm);
         }
         return out;
     }
