@@ -5,6 +5,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import vn.history.backend.dto.auth.AuthResponse;
+import vn.history.backend.dto.auth.ChangePasswordRequest;
 import vn.history.backend.dto.auth.LoginRequest;
 import vn.history.backend.dto.auth.RegisterRequest;
 import vn.history.backend.exception.ConflictException;
@@ -149,6 +150,18 @@ public class AuthService {
             refreshTokensRepository.findValidByHash(tokenHash)
                     .ifPresent(row -> refreshTokensRepository.revoke(row.id()));
         }
+    }
+
+    public void changePassword(long userId, ChangePasswordRequest req) {
+        String passwordHash = localCredentialsRepository.findPasswordHashByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException("Password login is not enabled for this account"));
+
+        if (!passwordEncoder.matches(req.currentPassword(), passwordHash)) {
+            throw new UnauthorizedException("Current password is incorrect");
+        }
+
+        String newPasswordHash = passwordEncoder.encode(req.newPassword());
+        localCredentialsRepository.updatePasswordHash(userId, newPasswordHash);
     }
 
     private AuthResult issueTokens(UsersRepository.UserRow user, String userAgent, String ip) {

@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: profile.id,
           name: displayName,
           email: profile.email,
-          provider: "email",
+          provider: profile.provider ?? "email",
           initials: getInitials(displayName),
         });
       })

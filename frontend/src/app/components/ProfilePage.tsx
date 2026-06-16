@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft, User, Mail, Shield, Camera,
-  MessageSquare, Layers, GraduationCap, Edit2, Check, X
+  MessageSquare, Layers, GraduationCap, Edit2, Check, X, KeyRound
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useAuth } from "../context/AuthContext";
 import { useApp } from "../context/AppContext";
 import { AuthRequired } from "./AuthRequired";
+import { backendApi } from "../api/backendApi";
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -17,6 +18,12 @@ export function ProfilePage() {
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState(user?.name ?? "");
   const [editBio, setEditBio] = useState("Đam mê nghiên cứu lịch sử Việt Nam và các nền văn hóa phương Đông.");
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const totalCards = flashcardDecks.reduce((acc, d) => acc + d.cards.length, 0);
   const masteredCards = flashcardDecks.reduce(
@@ -33,6 +40,38 @@ export function ProfilePage() {
   const handleSave = () => {
     setEditMode(false);
     // In a real app, persist changes via API
+  };
+
+  const resetPasswordForm = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordStatus(null);
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordStatus(null);
+
+    if (newPassword.length < 6) {
+      setPasswordStatus({ type: "error", message: "Mật khẩu mới phải có ít nhất 6 ký tự." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ type: "error", message: "Xác nhận mật khẩu không khớp." });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await backendApi.changePassword({ currentPassword, newPassword });
+      resetPasswordForm();
+      setShowPasswordForm(false);
+      setPasswordStatus({ type: "success", message: "Đã đổi mật khẩu thành công." });
+    } catch {
+      setPasswordStatus({ type: "error", message: "Không thể đổi mật khẩu. Kiểm tra lại mật khẩu hiện tại." });
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   if (!user) {
@@ -251,13 +290,83 @@ export function ProfilePage() {
             <p className="text-xs mb-3" style={{ color: "var(--t-text-4)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               Bảo mật
             </p>
-            <button
-              className="w-full flex items-center justify-between text-sm py-2 transition-all hover:opacity-70"
-              style={{ color: "var(--t-text-2)" }}
-            >
-              <span>Đổi mật khẩu</span>
-              <ArrowLeft size={13} className="rotate-180" style={{ color: "var(--t-text-4)" }} />
-            </button>
+            {passwordStatus && (
+              <div
+                className="mb-3 rounded-lg px-3 py-2 text-xs"
+                style={{
+                  background: passwordStatus.type === "success" ? "rgba(80,200,120,0.1)" : "rgba(255,100,100,0.1)",
+                  border: `1px solid ${passwordStatus.type === "success" ? "rgba(80,200,120,0.22)" : "rgba(255,100,100,0.22)"}`,
+                  color: passwordStatus.type === "success" ? "#50c878" : "rgba(255,120,120,0.9)",
+                }}
+              >
+                {passwordStatus.message}
+              </div>
+            )}
+
+            {!showPasswordForm ? (
+              <button
+                onClick={() => {
+                  setShowPasswordForm(true);
+                  setPasswordStatus(null);
+                }}
+                className="w-full flex items-center justify-between text-sm py-2 transition-all hover:opacity-70"
+                style={{ color: "var(--t-text-2)" }}
+              >
+                <span className="flex items-center gap-2">
+                  <KeyRound size={14} style={{ color: "var(--t-gold)" }} />
+                  Đổi mật khẩu
+                </span>
+                <ArrowLeft size={13} className="rotate-180" style={{ color: "var(--t-text-4)" }} />
+              </button>
+            ) : (
+              <div className="space-y-3">
+                {[
+                  { label: "Mật khẩu hiện tại", value: currentPassword, onChange: setCurrentPassword },
+                  { label: "Mật khẩu mới", value: newPassword, onChange: setNewPassword },
+                  { label: "Xác nhận mật khẩu mới", value: confirmPassword, onChange: setConfirmPassword },
+                ].map((field) => (
+                  <label key={field.label} className="block">
+                    <span className="text-xs mb-1 block" style={{ color: "var(--t-text-4)" }}>
+                      {field.label}
+                    </span>
+                    <input
+                      type="password"
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                      style={{
+                        background: "var(--t-input-inner-bg)",
+                        border: "1px solid var(--t-input-border)",
+                        color: "var(--t-text-1)",
+                      }}
+                    />
+                  </label>
+                ))}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all disabled:opacity-45"
+                    style={{ background: "linear-gradient(135deg, #c9a84c, #a87c2a)", color: "white" }}
+                  >
+                    <Check size={12} />
+                    {isChangingPassword ? "Đang lưu..." : "Lưu mật khẩu"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPasswordForm(false);
+                      resetPasswordForm();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80"
+                    style={{ background: "var(--t-btn-ghost-bg)", border: "1px solid var(--t-btn-border)", color: "var(--t-text-2)" }}
+                  >
+                    <X size={12} />
+                    Hủy
+                  </button>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </div>

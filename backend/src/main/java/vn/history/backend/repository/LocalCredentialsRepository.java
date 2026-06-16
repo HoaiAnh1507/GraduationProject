@@ -35,4 +35,15 @@ public class LocalCredentialsRepository {
             return Optional.empty();
         }
     }
+
+    public void updatePasswordHash(long userId, String passwordHash) {
+        final String sql = """
+                UPDATE local_credentials
+                SET password_hash = ?,
+                    password_updated_at = NOW(),
+                    updated_at = NOW()
+                WHERE user_id = ?
+                """;
+        jdbcTemplate.update(sql, passwordHash, userId);
+    }
 }

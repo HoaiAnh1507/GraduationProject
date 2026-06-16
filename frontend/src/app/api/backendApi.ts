@@ -55,6 +55,7 @@ export interface ProfileResponse {
   email: string;
   displayName: string | null;
   username: string | null;
+  provider?: "google" | "email";
   createdAt: string;
   updatedAt: string;
 }
@@ -205,6 +206,14 @@ export const backendApi = {
 
   logout(): Promise<void> {
     return httpJson<void>("/api/auth/logout", { method: "POST" });
+  },
+
+  changePassword(payload: { currentPassword: string; newPassword: string }): Promise<void> {
+    return httpJson<void>("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
 
   me(): Promise<ProfileResponse> {

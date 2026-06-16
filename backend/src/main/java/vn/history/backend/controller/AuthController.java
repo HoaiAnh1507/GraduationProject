@@ -10,9 +10,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.history.backend.dto.auth.AuthResponse;
+import vn.history.backend.dto.auth.ChangePasswordRequest;
 import vn.history.backend.dto.auth.LoginRequest;
 import vn.history.backend.dto.auth.RegisterRequest;
 import vn.history.backend.exception.UnauthorizedException;
+import vn.history.backend.security.SecurityUtils;
 import vn.history.backend.service.LoginRateLimiter;
 import vn.history.backend.service.auth.AuthCookieService;
 import vn.history.backend.service.auth.AuthService;
@@ -79,6 +81,12 @@ public class AuthController {
         ResponseEntity.HeadersBuilder<?> builder = ResponseEntity.noContent();
         authCookieService.clearCookies().forEach(cookie -> builder.header(HttpHeaders.SET_COOKIE, cookie));
         return builder.build();
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest req) {
+        authService.changePassword(SecurityUtils.requireUserId(), req);
+        return ResponseEntity.noContent().build();
     }
 
     private ResponseEntity<AuthResponse> withCookies(AuthService.AuthResult result, ResponseEntity<AuthResponse> response) {
