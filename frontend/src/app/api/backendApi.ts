@@ -217,7 +217,7 @@ export const backendApi = {
   },
 
   me(): Promise<ProfileResponse> {
-    return httpJson<ProfileResponse>("/api/me");
+    return httpJson<ProfileResponse>("/api/me", { cache: "no-store" });
   },
 
   listConversations(): Promise<ConversationSummary[]> {

@@ -87,6 +87,15 @@ public class UsersRepository {
         jdbcTemplate.update(sql, displayName, avatarUrl, emailVerified, userId);
     }
 
+    public void updateLastLogin(long userId) {
+        final String sql = """
+                UPDATE users
+                SET last_login_at = now()
+                WHERE id = ?
+                """;
+        jdbcTemplate.update(sql, userId);
+    }
+
     private static Instant toInstant(OffsetDateTime odt) {
         return odt == null ? null : odt.toInstant();
     }

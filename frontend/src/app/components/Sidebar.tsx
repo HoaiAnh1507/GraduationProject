@@ -101,9 +101,9 @@ export function Sidebar(_props: SidebarProps) {
     await deleteConversation(id);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
-    logout();
+    await logout();
     navigate("/");
   };
 

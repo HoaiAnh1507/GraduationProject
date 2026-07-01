@@ -1,9 +1,12 @@
 package vn.history.backend.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,6 +17,7 @@ import vn.history.backend.dto.auth.ChangePasswordRequest;
 import vn.history.backend.dto.auth.LoginRequest;
 import vn.history.backend.dto.auth.RegisterRequest;
 import vn.history.backend.exception.UnauthorizedException;
+import vn.history.backend.security.AuthenticatedUser;
 import vn.history.backend.security.SecurityUtils;
 import vn.history.backend.service.LoginRateLimiter;
 import vn.history.backend.service.auth.AuthCookieService;
@@ -75,9 +79,20 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @CookieValue(value = AuthCookieService.REFRESH_COOKIE, required = false) String refreshToken,
-            @CookieValue(value = AuthCookieService.ACCESS_COOKIE, required = false) String accessToken
+            @CookieValue(value = AuthCookieService.ACCESS_COOKIE, required = false) String accessToken,
+            HttpServletRequest httpReq
     ) {
-        authService.logout(refreshToken, accessToken);
+        try {
+            authService.logout(refreshToken, accessToken, currentUserIdOrNull());
+        } catch (RuntimeException ignored) {
+            // Browser cookies must be cleared even if token revocation temporarily fails.
+        } finally {
+            HttpSession session = httpReq.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+            SecurityContextHolder.clearContext();
+        }
         ResponseEntity.HeadersBuilder<?> builder = ResponseEntity.noContent();
         authCookieService.clearCookies().forEach(cookie -> builder.header(HttpHeaders.SET_COOKIE, cookie));
         return builder.build();
@@ -93,6 +108,15 @@ public class AuthController {
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.getStatusCode());
         authCookieService.authCookies(result).forEach(cookie -> builder.header(HttpHeaders.SET_COOKIE, cookie));
         return builder.body(response.getBody());
+    }
+
+    private Long currentUserIdOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        return principal instanceof AuthenticatedUser user ? user.id() : null;
     }
 
     private String userAgent(HttpServletRequest req) {

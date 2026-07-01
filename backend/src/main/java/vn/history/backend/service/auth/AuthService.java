@@ -74,6 +74,7 @@ public class AuthService {
 
             var user = usersRepository.findById(userId)
                     .orElseThrow(() -> new IllegalStateException("User not found after insert"));
+            usersRepository.updateLastLogin(user.id());
             return issueTokens(user, userAgent, ip);
         } catch (DuplicateKeyException e) {
             throw new ConflictException("Email already registered");
@@ -94,6 +95,7 @@ public class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
+        usersRepository.updateLastLogin(user.id());
         return issueTokens(user, userAgent, ip);
     }
 
@@ -142,13 +144,16 @@ public class AuthService {
         return issueTokens(user, userAgent, ip);
     }
 
-    public void logout(String refreshToken, String accessToken) {
+    public void logout(String refreshToken, String accessToken, Long currentUserId) {
         tokenBlacklistService.blacklistAccessToken(accessToken);
 
         if (refreshToken != null && !refreshToken.isBlank()) {
             String tokenHash = TokenHasher.sha256Hex(refreshToken);
             refreshTokensRepository.findValidByHash(tokenHash)
                     .ifPresent(row -> refreshTokensRepository.revoke(row.id()));
+        }
+        if (currentUserId != null) {
+            refreshTokensRepository.revokeAllForUser(currentUserId);
         }
     }
 

@@ -15,6 +15,7 @@ public class AuthCookieService {
 
     public static final String ACCESS_COOKIE = "access_token";
     public static final String REFRESH_COOKIE = "refresh_token";
+    public static final String SESSION_COOKIE = "JSESSIONID";
 
     private final boolean cookieSecure;
     private final String cookieSameSite;
@@ -37,7 +38,15 @@ public class AuthCookieService {
     public List<String> clearCookies() {
         return List.of(
                 clearCookie(ACCESS_COOKIE, "/"),
-                clearCookie(REFRESH_COOKIE, "/api/auth")
+                clearCookie(ACCESS_COOKIE, "/api"),
+                clearCookie(ACCESS_COOKIE, "/api/auth"),
+                clearCookie(REFRESH_COOKIE, "/"),
+                clearCookie(REFRESH_COOKIE, "/api"),
+                clearCookie(REFRESH_COOKIE, "/api/auth"),
+                clearCookie(SESSION_COOKIE, "/"),
+                clearCookie(SESSION_COOKIE, "/api"),
+                clearCookie(SESSION_COOKIE, "/oauth2"),
+                clearCookie(SESSION_COOKIE, "/login/oauth2")
         );
     }
 
@@ -60,7 +69,7 @@ public class AuthCookieService {
         return ResponseCookie.from(REFRESH_COOKIE, token)
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .path("/api/auth")
+                .path("/")
                 .sameSite(cookieSameSite)
                 .maxAge(maxAgeFrom(expiresAt))
                 .build()

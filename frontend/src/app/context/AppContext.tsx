@@ -114,14 +114,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
     }
 
+    setConversations([]);
+    setActiveConversationId(null);
+    setFlashcardDecks([]);
+
     loadUserConversations().catch(() => {
-      // Keep current in-memory state if backend is not ready.
+      if (!active) return;
+      setConversations([]);
+      setActiveConversationId(null);
+      setFlashcardDecks([]);
     });
 
     return () => {
       active = false;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user?.id]);
 
   const addCardsToDeck = async (deckId: string, cards: Flashcard[]): Promise<void> => {
     const serverDeckId = parseServerId(deckId);

@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
+                .securityContext(securityContext -> securityContext.requireExplicitSave(true))
                 .sessionManagement(session -> session.sessionCreationPolicy(
                         googleOAuth2Enabled ? SessionCreationPolicy.IF_REQUIRED : SessionCreationPolicy.STATELESS
                 ))

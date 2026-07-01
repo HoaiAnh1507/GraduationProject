@@ -32,15 +32,8 @@ function getInitials(name: string): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(() => {
-    try {
-      const stored = localStorage.getItem("app-user");
-      return stored ? (JSON.parse(stored) as AppUser) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const persist = (u: AppUser | null) => {
     if (u) localStorage.setItem("app-user", JSON.stringify(u));
@@ -91,13 +84,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await backendApi.logout();
-    persist(null);
+    try {
+      await backendApi.logout();
+    } catch {
+      // Clear local auth state even if the backend is temporarily unreachable.
+    } finally {
+      sessionStorage.removeItem(OPEN_NEW_CHAT_AFTER_LOGIN);
+      localStorage.removeItem("app-user");
+      setUser(null);
+    }
   };
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
+    localStorage.removeItem("app-user");
     backendApi
       .me()
       .then((profile) => {
